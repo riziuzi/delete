@@ -7,8 +7,11 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.riziuzi.utho.core.Lang
 
 val LocalLang = staticCompositionLocalOf { Lang.EN }
@@ -71,6 +74,20 @@ fun UthoTheme(theme: String, lang: Lang, content: @Composable () -> Unit) {
         "dark" -> true
         "light" -> false
         else -> isSystemInDarkTheme()
+    }
+    // Status and navigation bar icons follow the app's theme, not the phone's (dark icons on a dark screen were invisible).
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            var c = view.context
+            while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+            (c as? android.app.Activity)?.window?.let { w ->
+                WindowCompat.getInsetsController(w, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+        }
     }
     CompositionLocalProvider(LocalLang provides lang) {
         val scheme = if (dark) Dark else Light
