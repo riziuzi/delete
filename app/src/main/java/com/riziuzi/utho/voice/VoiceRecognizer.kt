@@ -1,0 +1,249 @@
+package com.riziuzi.utho.voice
+
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognitionSupport
+import android.speech.RecognitionSupportCallback
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
+import com.riziuzi.utho.data.VoiceLang
+
+/**
+ * Continuous speech-to-text using the phone's own recogniser, on-device first.
+ * Keeps listening across pauses until [stop]; each finished phrase arrives as one segment.
+ */
+class VoiceRecognizer(
+    private val context: Context,
+    private val lang: VoiceLang,
+    private val listener: Listener,
+) {
+    enum class Engine { ON_DEVICE, SYSTEM, NONE }
+
+    enum class Problem { NO_RECOGNIZER, NO_PERMISSION, LANGUAGE_MISSING, NETWORK_NEEDED, OTHER }
+
+    interface Listener {
+        fun onReady(engine: Engine) {}
+        fun onPartial(text: String) {}
+        fun onSegment(text: String) {}
+        fun onLevel(level: Float) {}
+        fun onProblem(problem: Problem, code: Int) {}
+        /** Called once after [stop], when the last results are in. */
+        fun onFinished() {}
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+    private var recognizer: SpeechRecognizer? = null
+    private var active = false
+    private var finished = false
+    private var triedSystem = false
+
+    var engine = Engine.NONE
+        private set
+
+    fun start() {
+        active = true
+        finished = false
+        if (!create(onDevice = true)) return
+        listen()
+    }
+
+    fun stop() {
+        if (!active) return
+        active = false
+        val r = recognizer
+        if (r == null) {
+            finish()
+            return
+        }
+        runCatching { r.stopListening() }
+        // If the recogniser has nothing pending it may never call back.
+        main.postDelayed({ finish() }, 2500)
+    }
+
+    fun destroy() {
+        active = false
+        main.removeCallbacksAndMessages(null)
+        runCatching { recognizer?.destroy() }
+        recognizer = null
+    }
+
+    private fun finish() {
+        if (finished) return
+        finished = true
+        listener.onFinished()
+    }
+
+    private fun create(onDevice: Boolean): Boolean {
+        runCatching { recognizer?.destroy() }
+        recognizer = null
+        val r: SpeechRecognizer? = try {
+            when {
+                onDevice && Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context) -> {
+                    engine = Engine.ON_DEVICE
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                }
+                SpeechRecognizer.isRecognitionAvailable(context) -> {
+                    engine = Engine.SYSTEM
+                    SpeechRecognizer.createSpeechRecognizer(context)
+                }
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (r == null) {
+            engine = Engine.NONE
+            active = false
+            listener.onProblem(Problem.NO_RECOGNIZER, -1)
+            finish()
+            return false
+        }
+        r.setRecognitionListener(callbacks)
+        recognizer = r
+        listener.onReady(engine)
+        return true
+    }
+
+    private fun listen() {
+        if (!active) return
+        try {
+            recognizer?.startListening(intent(context, lang))
+        } catch (_: Exception) {
+            main.postDelayed({ listen() }, 400)
+        }
+    }
+
+    private val callbacks = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) = listener.onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val t = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (t.isNotBlank()) listener.onPartial(t)
+        }
+
+        override fun onResults(results: Bundle?) {
+            val t = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (t.isNotBlank()) listener.onSegment(t)
+            if (active) main.postDelayed({ listen() }, 120) else finish()
+        }
+
+        override fun onError(error: Int) {
+            when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    if (active) main.postDelayed({ listen() }, 150) else finish()
+                }
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    if (active) main.postDelayed({ listen() }, 500) else finish()
+                }
+                SpeechRecognizer.ERROR_CLIENT -> {
+                    if (active) main.postDelayed({ listen() }, 300) else finish()
+                }
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail(Problem.NO_PERMISSION, error)
+                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+                SpeechRecognizer.ERROR_SERVER, 11 /* ERROR_SERVER_DISCONNECTED */ -> {
+                    if (engine == Engine.ON_DEVICE && !triedSystem) fallBack() else fail(Problem.NETWORK_NEEDED, error)
+                }
+                12 /* ERROR_LANGUAGE_NOT_SUPPORTED */, 13 /* ERROR_LANGUAGE_UNAVAILABLE */ -> {
+                    if (engine == Engine.ON_DEVICE && !triedSystem) fallBack() else fail(Problem.LANGUAGE_MISSING, error)
+                }
+                else -> fail(Problem.OTHER, error)
+            }
+        }
+    }
+
+    /** The on-device model can't handle this language yet: use the phone's regular recogniser instead. */
+    private fun fallBack() {
+        triedSystem = true
+        val wasActive = active
+        if (create(onDevice = false) && wasActive) {
+            active = true
+            listen()
+        }
+    }
+
+    private fun fail(p: Problem, code: Int) {
+        active = false
+        listener.onProblem(p, code)
+        finish()
+    }
+
+    companion object {
+        fun primaryTag(lang: VoiceLang) = if (lang == VoiceLang.ENGLISH) "en-IN" else "hi-IN"
+
+        fun intent(context: Context, lang: VoiceLang): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryTag(lang))
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+            if (Build.VERSION.SDK_INT >= 33) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
+            }
+            if (Build.VERSION.SDK_INT >= 34 && lang == VoiceLang.MIX) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_HIGH_PRECISION)
+                putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, arrayListOf("hi-IN", "en-IN"))
+            }
+        }
+
+        fun onDeviceAvailable(context: Context): Boolean =
+            Build.VERSION.SDK_INT >= 31 && runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
+
+        fun anyAvailable(context: Context): Boolean =
+            runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false) || onDeviceAvailable(context)
+
+        data class Support(val installed: List<String>, val pending: List<String>, val supported: List<String>, val online: List<String>)
+
+        /** Which languages the on-device recogniser has installed (Android 13+). */
+        @RequiresApi(33)
+        fun checkSupport(context: Context, lang: VoiceLang, result: (Support?) -> Unit) {
+            val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull()
+            if (r == null) {
+                result(null)
+                return
+            }
+            r.checkRecognitionSupport(
+                intent(context, lang), ContextCompat.getMainExecutor(context),
+                object : RecognitionSupportCallback {
+                    override fun onSupportResult(s: RecognitionSupport) {
+                        result(Support(s.installedOnDeviceLanguages, s.pendingOnDeviceLanguages, s.supportedOnDeviceLanguages, s.onlineLanguages))
+                        r.destroy()
+                    }
+
+                    override fun onError(error: Int) {
+                        result(null)
+                        r.destroy()
+                    }
+                },
+            )
+        }
+
+        /** Asks Android to download the on-device model for this language (Android 13+). */
+        @RequiresApi(33)
+        fun downloadModel(context: Context, tag: String): Boolean {
+            val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull() ?: return false
+            return runCatching {
+                r.triggerModelDownload(
+                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag),
+                )
+                Handler(Looper.getMainLooper()).postDelayed({ r.destroy() }, 3000)
+                true
+            }.getOrDefault(false)
+        }
+    }
+}

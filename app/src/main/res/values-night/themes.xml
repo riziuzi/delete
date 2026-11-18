@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.Utho" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#131316</item>
+    </style>
+</resources>

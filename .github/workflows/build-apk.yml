@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v5
 
@@ -19,35 +20,73 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Android SDK info
-        run: echo "ANDROID_HOME=$ANDROID_HOME"; ls $ANDROID_HOME/platforms || true
-
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Build and run unit tests
+        id: build
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee build.log
-          exit ${PIPESTATUS[0]}
+          set -o pipefail
+          ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace 2>&1 | tee build.log
 
       - name: Show errors
-        if: failure()
+        if: failure() && steps.build.outcome == 'failure'
         run: |
-          grep -E "^e: |error:|What went wrong|FAILURE|FAILED|AssertionError" -A3 build.log | head -60 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -E "^e: |error:|What went wrong|FAILED|AssertionError|expected:" -A3 build.log | head -80 | while IFS= read -r line; do echo "::error::$line"; done
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk PushUpAlarm.apk
+      - name: Enable KVM
+        if: steps.build.outcome == 'success'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Screen tour on an emulator
+        id: tour
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-front emulated -camera-back emulated
+          script: bash ci/tour.sh
+
+      - name: Push test output to the ci-output branch
+        if: always()
+        run: |
+          mkdir -p ci-out
+          cp build.log ci-out/ 2>/dev/null || true
+          cp -r app/build/reports/tests ci-out/unit-test-report 2>/dev/null || true
+          cp -r app/build/test-results ci-out/unit-test-results 2>/dev/null || true
+          find app/build/outputs/apk -name "*.apk" -exec ls -l {} \; > ci-out/apks.txt 2>/dev/null || true
+          echo "build=${{ steps.build.outcome }} tour=${{ steps.tour.outcome }} run=${{ github.run_number }} sha=${{ github.sha }}" > ci-out/status.txt
+          cd ci-out
+          git init -q
+          git checkout -q -b ci-output
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "CI output run ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-output
+
+      - name: Name the APK
+        if: steps.build.outcome == 'success'
+        run: cp app/build/outputs/apk/release/app-arm64-v8a-release.apk Utho.apk
 
       - uses: actions/upload-artifact@v4
+        if: steps.build.outcome == 'success'
         with:
-          name: PushUpAlarm-apk
-          path: PushUpAlarm.apk
+          name: Utho-apk
+          path: Utho.apk
 
       - name: Publish release
+        if: steps.build.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pushup-alarm-build-${{ github.run_number }}
-          name: PushUp Alarm build ${{ github.run_number }}
+          tag_name: utho-build-${{ github.run_number }}
+          name: Utho build ${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          files: PushUpAlarm.apk
-          body: Install PushUpAlarm.apk on your phone.
+          files: Utho.apk
+          body: Install Utho.apk on your phone (64-bit Android 8.1 or newer).
