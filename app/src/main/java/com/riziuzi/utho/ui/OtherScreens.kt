@@ -470,16 +470,16 @@ private fun OfflineVoice() {
         }
         status?.let { Muted(it) }
         ButtonsRow {
-            SecondButton(tr("Get Hindi pack", "Hindi pack lein"), {
+            SecondButton("Hindi pack", {
                 VoiceRecognizer.downloadModel(ctx, "hi-IN")
                 requested = !requested
             }, Modifier.weight(1f))
-            SecondButton(tr("Get English pack", "English pack lein"), {
+            SecondButton("English pack", {
                 VoiceRecognizer.downloadModel(ctx, "en-IN")
                 requested = !requested
             }, Modifier.weight(1f))
         }
-        Muted(tr("Download once on Wi-Fi so check-ins work without internet.", "Ek baar Wi-Fi par download karein, phir bina internet chalega."))
+        Muted(tr("Tap to download once on Wi-Fi, then check-ins work without internet.", "Ek baar Wi-Fi par tap karke download karein, phir bina internet chalega."))
     } else {
         Muted(
             tr(

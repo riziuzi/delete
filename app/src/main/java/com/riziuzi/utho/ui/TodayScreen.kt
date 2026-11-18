@@ -230,7 +230,8 @@ fun TodayScreen(nav: Nav) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     StatusDot(done = summary.studyMinutes >= goal, partial = summary.studyMinutes > 0)
                     Text(tr("Study", "Padhai"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Muted(tr("${JournalWriter.duration(summary.studyMinutes, lang)} of ${JournalWriter.duration(goal, lang)}", "${JournalWriter.duration(goal, lang)} mein se ${JournalWriter.duration(summary.studyMinutes, lang)}"))
+                    // Short units in both languages so the row never wraps.
+                    Muted("${JournalWriter.duration(summary.studyMinutes, Lang.EN)} / ${JournalWriter.duration(goal, Lang.EN)}")
                 }
                 Bar(if (goal > 0) summary.studyMinutes / goal.toFloat() else 0f)
             }
@@ -240,7 +241,8 @@ fun TodayScreen(nav: Nav) {
                 done = note.mood != null,
                 partial = false,
                 title = tr("Journal", "Journal"),
-                sub = if (note.mood != null) tr("Mood added", "Mood add ho gaya") else tr("Writes itself. You add your mood.", "Apne aap likha jaata hai. Aap bas mood batayein."),
+                sub = note.mood?.let { tr("Writes itself · Mood: ", "Apne aap likha jaata hai · Mood: ") + com.riziuzi.utho.core.Moods.label(it, lang) }
+                    ?: tr("Writes itself. Mood comes from what you say.", "Apne aap likha jaata hai. Mood aapki baat se aata hai."),
                 action = null,
                 onAction = {},
                 modifier = Modifier.clickable { nav.go(Route.Journal(today.toEpochDay())) }.testTag("journalRow"),

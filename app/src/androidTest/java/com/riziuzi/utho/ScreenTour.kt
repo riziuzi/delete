@@ -180,13 +180,20 @@ class ScreenTour {
         // ---- the timed pop-up when nobody answers: waits 15 s, says "not selected / not said", closes by itself
         val before = store.activeSession()!!.checkIns.size
         startActivity(Intent(ctx, CheckInActivity::class.java))
-        Thread.sleep(16_000)
-        shot("29c-checkin-no-answer", 200)
-        val deadline = System.currentTimeMillis() + 25_000
-        while (store.activeSession()!!.checkIns.size == before && System.currentTimeMillis() < deadline) {
-            rule.waitForIdle()
-            Thread.sleep(500)
+        // The test pauses Compose timers unless its clock is moved; the pop-up itself counts wall time.
+        fun passTime(ms: Long) {
+            val end = System.currentTimeMillis() + ms
+            while (System.currentTimeMillis() < end) {
+                rule.mainClock.advanceTimeBy(250)
+                Thread.sleep(250)
+            }
         }
+        passTime(7_000)
+        shot("29c-checkin-waiting", 100)
+        passTime(9_000)
+        shot("29d-checkin-no-answer", 100)
+        val deadline = System.currentTimeMillis() + 15_000
+        while (store.activeSession()!!.checkIns.size == before && System.currentTimeMillis() < deadline) passTime(500)
         store.activeSession()!!.checkIns.let {
             org.junit.Assert.assertEquals(before + 1, it.size)
             org.junit.Assert.assertNull(it.last().topic)

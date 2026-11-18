@@ -148,7 +148,7 @@ fun ProgressScreen(nav: Nav) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(t, fontSize = 14.sp, modifier = Modifier.width(110.dp), maxLines = 1)
                     Bar(m / max.toFloat(), Modifier.weight(1f))
-                    Text(JournalWriter.duration(m, lang), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(78.dp), textAlign = TextAlign.End)
+                    Text(JournalWriter.duration(m, Lang.EN), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(78.dp), textAlign = TextAlign.End)
                 }
             }
         }
