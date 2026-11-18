@@ -36,40 +36,13 @@ class AlarmReceiver : BroadcastReceiver() {
                 )
                 Notifications.post(ctx, Notifications.ID_AWAKE, n)
             }
-            AlarmScheduler.ACTION_CHECK_IN -> {
-                val session = Store.get(ctx).activeSession()
-                if (session == null || prefs.checkInEverySec <= 0) {
-                    AlarmScheduler.cancelCheckIn(ctx)
-                    return
-                }
-                // Forgot to stop? After 3 unanswered check-ins, end the session at the last sign of studying.
-                val now = System.currentTimeMillis()
-                val lastSign = maxOf(session.startMs, session.checkIns.filter { it.text.isNotBlank() || it.kind == CheckInKind.SWITCH }.maxOfOrNull { it.timeMs } ?: 0L)
-                val intervalMs = prefs.checkInEverySec * 1000L
-                if (now - lastSign > 3 * intervalMs + 5 * 60_000L) {
-                    Store.get(ctx).endSession(session.id, lastSign)
-                    AlarmScheduler.cancelCheckIn(ctx)
-                    Notifications.cancel(ctx, Notifications.ID_SESSION)
-                    Notifications.simple(
-                        ctx, Notifications.ID_STUDY,
-                        lang.t("Study session stopped", "Padhai session rok diya"),
-                        lang.t("No answer to the last 3 check-ins, so it was saved until your last one.", "Pichhle 3 check-in ka jawaab nahi mila, isliye aakhri check-in tak save kiya."),
-                        Intent(ctx, MainActivity::class.java),
-                    )
-                    return
-                }
-                AlarmScheduler.scheduleNextCheckIn(ctx)
-                // Saved as missed right away; the pop-up (or a later answer) fills it in. Unanswered, this
-                // stretch isn't counted, even if the pop-up never got to show.
-                Store.get(ctx).addCheckIn(session.id, CheckIn(now, "", null, CheckInKind.MISSED))
-                val n = Notifications.fullScreen(
-                    ctx, Notifications.ID_CHECKIN, Notifications.CH_CHECKIN,
-                    lang.t("Quick check-in", "Quick check-in"),
-                    lang.t("Say what you studied in the last ${JournalWriter.span(prefs.checkInEverySec, lang)}", "Bataiye pichhle ${JournalWriter.span(prefs.checkInEverySec, lang)} mein kya padha aur mood kaisa hai"),
-                    CheckInActivity.timedIntent(ctx, now), NotificationCompat.CATEGORY_REMINDER,
-                )
-                Notifications.post(ctx, Notifications.ID_CHECKIN, n)
-            }
+            AlarmScheduler.ACTION_CHECK_IN -> CheckIns.start(ctx)
+            // The pop-up never opened (or was never answered): stop studying, no entry for this interval.
+            AlarmScheduler.ACTION_CHECK_IN_DEADLINE -> CheckIns.noAnswer(ctx, intent.getLongExtra(AlarmScheduler.EXTRA_TIME, -1L))
+            AlarmScheduler.ACTION_TEST_POPUP -> CheckIns.open(
+                ctx, CheckInActivity.testIntent(ctx),
+                lang.t("Test check-in", "Test check-in"), lang.t("This is how the pop-up will look", "Pop-up aisa dikhega"),
+            )
             AlarmScheduler.ACTION_STUDY_REMINDER -> {
                 AlarmScheduler.scheduleReminders(ctx)
                 val today = LocalDate.now(Summaries.zone)

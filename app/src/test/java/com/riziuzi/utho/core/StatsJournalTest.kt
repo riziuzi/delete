@@ -50,6 +50,21 @@ class StatsTest {
         assertEquals(90, Stats.longestBlockMinutes(listOf(answered), day, IST, at(day, 23, 0)))
     }
 
+    @Test fun lastConfirmedIsTheLastAnswerOrTheStart() {
+        val start = at(day, 9, 0)
+        assertEquals(start, Stats.lastConfirmedMs(StudySession(1, start, null, "Polity")))
+        val s = StudySession(
+            1, start, null, "Polity",
+            listOf(
+                CheckIn(at(day, 9, 30), "polity padhi", "Polity"),
+                CheckIn(at(day, 9, 45), "", "History", CheckInKind.SWITCH),
+                CheckIn(at(day, 10, 15), "", null, CheckInKind.MISSED),
+                CheckIn(at(day, 10, 20), "", null), // nothing said: not an answer
+            ),
+        )
+        assertEquals(at(day, 9, 45), Stats.lastConfirmedMs(s))
+    }
+
     @Test fun switchChangesTheNextStretch() {
         val s = StudySession(
             1, at(day, 9, 0), at(day, 10, 0), "Polity",

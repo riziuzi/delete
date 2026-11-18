@@ -338,6 +338,13 @@ fun SettingsScreen(nav: Nav) {
             )
             Muted(tr("Both = Hindi and English mixed in one sentence.", "Dono = ek hi sentence mein Hindi aur English."))
             Divider()
+            Box(Modifier.testTag("openPopupSetup")) {
+                NavRow(
+                    tr("Pop-up opens by itself", "Pop-up apne aap khule"),
+                    if (popupReady(ctx)) tr("Ready", "Ready") else tr("Set up", "Set up karein"), { nav.go(Route.PopupSetup) },
+                )
+            }
+            Divider()
             CheckInSound()
             Divider()
             NavRow(tr("What Utho has learned", "Utho ne kya seekha"), null, { nav.go(Route.Learned) })

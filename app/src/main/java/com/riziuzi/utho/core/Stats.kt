@@ -36,6 +36,16 @@ object Stats {
         return out
     }
 
+    /**
+     * The last moment you were known to be studying: your last answered check-in or note, a subject change,
+     * or the start. When a check-in gets no answer, the session ends here, so the unanswered stretch isn't counted.
+     */
+    fun lastConfirmedMs(s: StudySession): Long = maxOf(
+        s.startMs,
+        s.checkIns.filter { (it.kind == CheckInKind.SPOKEN && it.text.isNotBlank()) || it.kind == CheckInKind.SWITCH }
+            .maxOfOrNull { it.timeMs } ?: s.startMs,
+    )
+
     fun dayStart(date: LocalDate, zone: ZoneId): Long = date.atStartOfDay(zone).toInstant().toEpochMilli()
 
     fun dayEnd(date: LocalDate, zone: ZoneId): Long = dayStart(date.plusDays(1), zone)

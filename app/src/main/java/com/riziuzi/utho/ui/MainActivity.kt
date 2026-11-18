@@ -46,6 +46,7 @@ sealed interface Route {
     data object Profile : Route
     data object Settings : Route
     data object Learned : Route
+    data object PopupSetup : Route
 }
 
 enum class Tab { TODAY, PROGRESS, GROUP }
@@ -128,6 +129,7 @@ fun AppRoot(open: MutableState<String?>) {
                 Route.Profile -> ProfileScreen(nav)
                 Route.Settings -> SettingsScreen(nav)
                 Route.Learned -> LearnedScreen(nav)
+                Route.PopupSetup -> PopupSetupScreen(nav)
             }
         }
     }

@@ -138,10 +138,12 @@ fun TodayScreen(nav: Nav) {
             Avatar(name, 44.dp, Modifier.clip(CircleShape).clickable { nav.go(Route.Profile) }.testTag("avatar"))
         }
 
-        if (remember(tick) { prefs.alarmEnabled } && needsFullScreenPermission(ctx)) {
-            CardBox(color = MaterialTheme.colorScheme.secondaryContainer, onClick = { openFullScreenSettings(ctx) }) {
-                Text(tr("Allow the alarm screen over the lock screen", "Lock screen par alarm dikhane ki permission dein"), fontWeight = FontWeight.SemiBold)
-                Muted(tr("Tap, then turn on full-screen notifications for Utho.", "Tap karein aur Utho ke liye full-screen notification on karein."))
+        val resumed = rememberResumeTick()
+        val needsSetup = remember(tick, resumed) { (prefs.alarmEnabled || prefs.checkInEverySec > 0) && !popupReady(ctx) }
+        if (needsSetup) {
+            CardBox(color = MaterialTheme.colorScheme.secondaryContainer, onClick = { nav.go(Route.PopupSetup) }, modifier = Modifier.testTag("setupCard")) {
+                Text(tr("Let check-ins and the alarm open by themselves", "Check-in aur alarm ko apne aap khulne dein"), fontWeight = FontWeight.SemiBold)
+                Muted(tr("A few phone switches are off, so the pop-up may not appear. Tap to fix.", "Phone ke kuch switch off hain, isliye pop-up shayad na aaye. Theek karne ke liye tap karein."))
             }
         }
 

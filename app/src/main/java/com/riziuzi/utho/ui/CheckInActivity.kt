@@ -54,7 +54,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.riziuzi.utho.alarm.AlarmScheduler
 import com.riziuzi.utho.alarm.AlarmService
+import com.riziuzi.utho.alarm.CheckIns
 import com.riziuzi.utho.alarm.Beeper
 import com.riziuzi.utho.voice.BeepMuter
 import com.riziuzi.utho.voice.Earcons
@@ -75,17 +77,18 @@ import kotlinx.coroutines.delay
 import java.time.Instant
 
 /**
- * Voice (or typed) study notes. Three ways in:
- *  - TIMED: the pop-up every N minutes (Settings), also over the lock screen. Listens a few seconds (Settings).
- *    If nothing is said the check-in stays "missed" (those minutes aren't counted) and a notification lets you
- *    answer later.
+ * Voice (or typed) study notes. Ways in:
+ *  - TIMED: when a study interval ends the pop-up opens by itself (also over the lock screen) and listens for the
+ *    time set in Settings. Something said: it's saved (subject and mood if found) and the study timer goes on.
+ *    Nothing said: the study timer stops at your last answer and this interval leaves no entry (see [CheckIns]).
+ *  - TEST: the same pop-up from Settings, to check it appears; saves nothing.
  *  - NOTE: Speak / Type from the home screen or journal. The mic stays on until Done.
- *  - ANSWER: a missed check-in opened later from its notification or the journal. Like NOTE, and the
- *    answer fills in that check-in so its minutes count.
+ *  - ANSWER: an older missed check-in from the journal; the answer fills it in.
  * The text is written in Hinglish; subject and mood are picked automatically and can be fixed with a tap.
  */
 class CheckInActivity : ComponentActivity() {
     private var shownMode: Mode? = null
+    private var shownTime = -1L
 
     /**
      * The pop-up is single-top, so a new request (Speak, a missed-check-in notification) arrives here while one is
@@ -96,10 +99,10 @@ class CheckInActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val newMode = Mode.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_MODE) } ?: Mode.TIMED
         val time = intent.getLongExtra(EXTRA_TIME, -1L)
-        if (newMode == Mode.TIMED && shownMode != null && shownMode != Mode.TIMED) {
-            if (time > 0) Notifications.showMissed(this, time)
-            return
-        }
+        // The same pop-up asked for twice (full-screen notification and direct start): keep the open one.
+        if (newMode == shownMode && time == shownTime) return
+        // Never interrupt a note you're in the middle of; that check-in's own deadline decides it.
+        if (newMode == Mode.TIMED && shownMode != null && shownMode != Mode.TIMED) return
         setIntent(intent)
         recreate()
     }
@@ -114,18 +117,24 @@ class CheckInActivity : ComponentActivity() {
         val session = store.activeSession()
         val now = System.currentTimeMillis()
         var mode = Mode.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_MODE) } ?: Mode.TIMED
-        var target = intent.getLongExtra(EXTRA_TIME, -1L).takeIf { it > 0 }?.let { store.findCheckIn(it) }
+        val timeExtra = intent.getLongExtra(EXTRA_TIME, -1L)
+        var target = timeExtra.takeIf { it > 0 }?.let { store.findCheckIn(it) }
         if (target != null && target.kind != CheckInKind.MISSED) target = null // already answered
-        // A timed pop-up opened late from the notification tray: answer it without the 15 s limit.
-        if (mode == Mode.TIMED && target != null && now - target.timeMs > LATE_MS) mode = Mode.ANSWER
-        if (mode == Mode.ANSWER && target == null) mode = Mode.NOTE
-        if (mode == Mode.TIMED && session == null && target == null) {
-            finish()
-            return
+        if (mode == Mode.TIMED) {
+            // Already answered, or study already stopped for it, or no study running: nothing to ask.
+            if (session == null || (timeExtra > 0 && target == null)) {
+                finish()
+                return
+            }
+            if (target == null) target = CheckIn(now, "", null, CheckInKind.MISSED).also { store.addCheckIn(session.id, it) }
+            // The pop-up is up, so it decides; the backup deadline is only for when it never shows.
+            AlarmScheduler.cancelDeadline(this)
         }
+        if (mode == Mode.ANSWER && target == null) mode = Mode.NOTE
         if (target != null) Notifications.cancel(this, Notifications.ID_MISSED)
         com.riziuzi.utho.data.MeaningModel.preload(this)
         shownMode = mode
+        shownTime = timeExtra
         val typeFirst = intent.getBooleanExtra(EXTRA_TYPE, false)
         val prefs = Prefs(this)
         setContent {
@@ -135,13 +144,15 @@ class CheckInActivity : ComponentActivity() {
         }
     }
 
-    enum class Mode { TIMED, NOTE, ANSWER }
+    enum class Mode { TIMED, TEST, NOTE, ANSWER }
 
     companion object {
         const val EXTRA_MODE = "mode"
         const val EXTRA_TIME = "time"
         const val EXTRA_TYPE = "type"
-        private const val LATE_MS = 2 * 60_000L
+
+        /** Tests only (debug builds): text to treat as heard, since an emulator can't hear. */
+        const val EXTRA_FAKE_HEARD = "fakeHeard"
 
         /** Speak (or type) a note now: home screen, journal, study screen. */
         fun noteIntent(ctx: Context, type: Boolean = false): Intent =
@@ -151,19 +162,22 @@ class CheckInActivity : ComponentActivity() {
         fun timedIntent(ctx: Context, timeMs: Long): Intent =
             Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.TIMED.name).putExtra(EXTRA_TIME, timeMs)
 
+        /** Settings › test the pop-up: listens like a real check-in but saves nothing. */
+        fun testIntent(ctx: Context): Intent = Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.TEST.name)
+
         /** Answer the missed check-in saved at [timeMs]. */
         fun answerIntent(ctx: Context, timeMs: Long, type: Boolean = false): Intent =
             Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.ANSWER.name).putExtra(EXTRA_TIME, timeMs).putExtra(EXTRA_TYPE, type)
     }
 }
 
-private enum class Stage { LISTENING, TYPING, RESULT, MISSED }
+private enum class Stage { LISTENING, TYPING, RESULT, STOPPED }
 
 /** A note you start yourself listens until you tap Done (with a 30-minute safety stop). */
 private const val NOTE_MAX_MS = 30 * 60_000L
 
 /** How long media stays muted after the mic closes, so the speech service's closing beep can't be heard. */
-private const val UNMUTE_DELAY_MS = 2000L
+private const val UNMUTE_DELAY_MS = 5000L
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -182,6 +196,15 @@ private fun CheckInScreen(
     val prefs = remember { Prefs(ctx) }
     val store = remember { Store.get(ctx) }
     val timed = mode == CheckInActivity.Mode.TIMED
+    val test = mode == CheckInActivity.Mode.TEST
+    // Timed and test pop-ups listen by themselves for the set time and close by themselves.
+    val auto = timed || test
+    val fakeHeard = remember {
+        val debuggable = (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        (ctx as? android.app.Activity)?.intent?.getStringExtra(CheckInActivity.EXTRA_FAKE_HEARD)?.takeIf { debuggable }
+    }
+    var resolved by remember { mutableStateOf(false) }
+    var stoppedAt by remember { mutableLongStateOf(0L) }
     val subjects = remember { prefs.subjects.ifEmpty { listOfNotNull(session?.subject) } }
     val startedAt = remember { target?.timeMs ?: System.currentTimeMillis() }
 
@@ -226,11 +249,19 @@ private fun CheckInScreen(
     fun save() {
         if (saved) return
         saved = true
+        resolved = true
+        if (test) {
+            onDone()
+            return
+        }
         val chosen = topic
         val corrected = chosen != guessedTopic
         val c = CheckIn(startedAt, text, chosen, CheckInKind.SPOKEN, corrected = corrected, mood = mood)
         when {
-            target != null -> store.updateCheckIn(target.timeMs) { c }
+            target != null -> {
+                store.updateCheckIn(target.timeMs) { c }
+                if (timed) CheckIns.answered(ctx)
+            }
             session != null && timed -> store.addCheckIn(session.id, c)
             session != null -> store.addCheckIn(session.id, c.copy(timeMs = System.currentTimeMillis()))
             else -> store.addFreeNote(c)
@@ -239,7 +270,7 @@ private fun CheckInScreen(
         // The word list grows from notes you confirmed: a fix counts double, a plain Save once.
         // A timed pop-up that saved itself without a tap teaches nothing (it may have guessed wrong).
         if (chosen != null && text.isNotBlank()) {
-            if (corrected) store.learn(chosen, text, strong = true) else if (!timed || touched) store.learn(chosen, text, strong = false)
+            if (corrected) store.learn(chosen, text, strong = true) else if (!auto || touched) store.learn(chosen, text, strong = false)
         }
         onDone()
     }
@@ -251,18 +282,17 @@ private fun CheckInScreen(
         guessedTopic = found
         topic = found
         mood = Moods.detect(written) ?: Moods.detect(original)
-        closeIn = 5
-        closeAt = System.currentTimeMillis() + 5000
+        closeIn = 3
+        closeAt = System.currentTimeMillis() + 3000
         stage = Stage.RESULT
     }
 
-    /** Nobody answered the timed pop-up: keep it as missed and offer to answer later. */
-    fun missed() {
-        if (stage == Stage.MISSED) return
-        stage = Stage.MISSED
-        val t = target?.timeMs ?: startedAt
-        if (target == null && session != null) store.addCheckIn(session.id, CheckIn(t, "", null, CheckInKind.MISSED))
-        Notifications.showMissed(ctx, t)
+    /** Nothing was said: the study timer stops at your last answer and this interval leaves no entry. */
+    fun noAnswer() {
+        if (stage == Stage.STOPPED) return
+        resolved = true
+        stage = Stage.STOPPED
+        if (timed && target != null) stoppedAt = CheckIns.noAnswer(ctx, target.timeMs) ?: 0L
     }
 
     fun afterListening() {
@@ -270,7 +300,7 @@ private fun CheckInScreen(
         val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
         when {
             heard.isNotEmpty() -> analyse(heard.joinToString(" "), Hinglish.note(heard))
-            timed -> missed()
+            auto -> noAnswer()
             else -> {
                 typeHint = problem ?: lang.t2("Didn't catch anything. Type it, or tap Speak to try again.", "Kuch sunai nahi diya. Type karein, ya Bolein dabakar phir try karein.")
                 stage = Stage.TYPING
@@ -334,6 +364,9 @@ private fun CheckInScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // A timed pop-up closed (back, swipe away) before it was answered counts as no answer.
+            val changing = (ctx as? android.app.Activity)?.isChangingConfigurations == true
+            if (timed && !resolved && !changing && target != null) CheckIns.noAnswer(ctx, target.timeMs)
             // Closing while the mic is on: let the service go while muted, then bring media back.
             recognizer.destroy()
             Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, UNMUTE_DELAY_MS)
@@ -346,19 +379,23 @@ private fun CheckInScreen(
         if (micOk) {
             muter.mute()
             // One session for the whole note, so the phone's mic beep comes once, not after every pause.
-            recognizer.sessionMs = if (timed) (listenSeconds + 10) * 1000L else NOTE_MAX_MS
+            recognizer.sessionMs = if (auto) (listenSeconds + 10) * 1000L else NOTE_MAX_MS
             recognizer.start()
         } else {
             problem = lang.t2("Microphone permission is off. Open Utho once and allow the microphone.", "Mic ki permission band hai. Utho kholkar mic allow karein.")
         }
         val readyBy = System.currentTimeMillis() + 5000
         while (!ready && problem == null && System.currentTimeMillis() < readyBy) delay(100)
+        if (fakeHeard != null) {
+            raw += fakeHeard
+            lastSpeech = System.currentTimeMillis() - 3000
+        }
         val from = System.currentTimeMillis()
         while (stage == Stage.LISTENING) {
             delay(200)
             val elapsed = System.currentTimeMillis() - from
             elapsedSec = (elapsed / 1000).toInt()
-            if (timed) {
+            if (auto) {
                 secondsLeft = (listenSeconds - elapsedSec).coerceAtLeast(0)
                 val paused = raw.isNotEmpty() && partial.isBlank() && System.currentTimeMillis() - lastSpeech > 2500
                 if (secondsLeft == 0 || paused) break
@@ -372,7 +409,7 @@ private fun CheckInScreen(
     // Timed result: save and close by itself (counts wall time). Notes wait for Save.
     LaunchedEffect(stage) {
         when (stage) {
-            Stage.RESULT -> if (timed) {
+            Stage.RESULT -> if (auto) {
                 while (!saved) {
                     val left = closeAt - System.currentTimeMillis()
                     if (left <= 0) break
@@ -381,8 +418,8 @@ private fun CheckInScreen(
                 }
                 save()
             }
-            Stage.MISSED -> {
-                val until = System.currentTimeMillis() + 3000
+            Stage.STOPPED -> {
+                val until = System.currentTimeMillis() + 6000
                 while (System.currentTimeMillis() < until) delay(200)
                 onDone()
             }
@@ -391,12 +428,12 @@ private fun CheckInScreen(
     }
 
     val question = when {
-        target != null && interval > 0 -> {
+        mode == CheckInActivity.Mode.ANSWER && target != null && interval > 0 -> {
             val a = JournalWriter.clock(target.timeMs - interval * 1000L, Summaries.zone, lang)
             val b = JournalWriter.clock(target.timeMs, Summaries.zone, lang)
             tr("What did you study from $a to $b?", "$a se $b tak kya padha?")
         }
-        timed && interval > 0 -> {
+        auto && interval > 0 -> {
             val span = JournalWriter.span(interval, lang)
             tr("What did you study in the last $span? How's your mood?", "Pichhle $span mein kya padha? Mood kaisa hai?")
         }
@@ -411,7 +448,8 @@ private fun CheckInScreen(
     ) {
         Text(
             when {
-                target != null -> tr("Missed check-in", "Missed check-in")
+                test -> tr("Test check-in", "Test check-in")
+                mode == CheckInActivity.Mode.ANSWER -> tr("Missed check-in", "Missed check-in")
                 timed -> tr("Quick check-in", "Quick check-in")
                 else -> tr("Study note", "Study note")
             },
@@ -424,10 +462,10 @@ private fun CheckInScreen(
                 Spacer(Modifier.height(4.dp))
                 val label = when {
                     !ready && problem == null -> "…"
-                    timed -> "$secondsLeft"
+                    auto -> "$secondsLeft"
                     else -> "%d:%02d".format(elapsedSec / 60, elapsedSec % 60)
                 }
-                Ring(if (timed) secondsLeft / listenSeconds.toFloat() else 1f, level, label)
+                Ring(if (auto) secondsLeft / listenSeconds.toFloat() else 1f, level, label)
                 val live = (raw + listOf(partial)).filter { it.isNotBlank() }.joinToString(" ") { Hinglish.convert(it) }
                 Text(
                     live.ifBlank {
@@ -437,13 +475,7 @@ private fun CheckInScreen(
                 )
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
                 ButtonsRow {
-                    if (timed) {
-                        SecondButton(tr("Skip", "Skip"), {
-                            recognizer.destroy()
-                            closeMic()
-                            missed()
-                        }, Modifier.weight(1f))
-                    } else {
+                    if (!auto) {
                         SecondButton(tr("Type", "Type"), {
                             recognizer.destroy()
                             closeMic()
@@ -454,7 +486,9 @@ private fun CheckInScreen(
                     }
                     BigButton(tr("Done", "Ho gaya"), { stopListening() }, Modifier.weight(1f).testTag("checkInDone"))
                 }
-                if (!timed) {
+                if (auto) {
+                    Muted(tr("Say nothing and study stops here.", "Kuch nahi bolenge to padhai yahin ruk jaayegi."), textAlign = TextAlign.Center)
+                } else {
                     SmallTextButton(tr("Cancel", "Cancel")) {
                         recognizer.destroy()
                         closeMic()
@@ -500,7 +534,7 @@ private fun CheckInScreen(
                         OptionTile(s, s == topic, {
                             topic = if (topic == s) null else s
                             touched = true
-                            closeAt = System.currentTimeMillis() + 5000
+                            closeAt = System.currentTimeMillis() + 4000
                         }, minHeight = 44.dp)
                     }
                 }
@@ -509,12 +543,12 @@ private fun CheckInScreen(
                         OptionTile(Moods.label(m, lang), m == mood, {
                             mood = if (mood == m) null else m
                             touched = true
-                            closeAt = System.currentTimeMillis() + 5000
+                            closeAt = System.currentTimeMillis() + 4000
                         }, minHeight = 44.dp)
                     }
                 }
-                if (timed) {
-                    BigButton("Save ($closeIn)", {
+                if (auto) {
+                    BigButton(if (test) tr("Close ($closeIn)", "Band ($closeIn)") else "Save ($closeIn)", {
                         touched = true
                         save()
                     }, Modifier.testTag("checkInSave"))
@@ -526,19 +560,28 @@ private fun CheckInScreen(
                 }
             }
 
-            Stage.MISSED -> {
-                Text(tr("Nothing heard", "Kuch sunai nahi diya"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                CardBox {
-                    Text("Subject: " + tr("not selected", "select nahi hua"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Mood: " + tr("not said", "nahi bataya"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                }
+            Stage.STOPPED -> {
+                Text(
+                    if (test) tr("Nothing heard", "Kuch sunai nahi diya") else tr("Study stopped", "Padhai ruk gayi"),
+                    style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("checkInStopped"),
+                )
                 Muted(
-                    tr(
-                        "These ${JournalWriter.span(interval, lang)} won't count until you answer. Tap the notification to speak or type it later.",
-                        "Jab tak jawaab nahi denge, yeh ${JournalWriter.span(interval, lang)} count nahi honge. Baad mein notification par tap karke bolein ya likhein.",
-                    ),
+                    when {
+                        test -> tr("In a real check-in the study timer would stop here.", "Asli check-in mein padhai ka timer yahin ruk jaata.")
+                        stoppedAt > 0 -> tr(
+                            "Nothing was said, so the timer stopped at ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)}. This interval isn't counted.",
+                            "Kuch nahi bola, isliye timer ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)} par ruk gaya. Yeh interval count nahi hua.",
+                        )
+                        else -> tr("Nothing was said.", "Kuch nahi bola.")
+                    },
                     textAlign = TextAlign.Center,
                 )
+                if (timed && session != null) {
+                    BigButton(tr("Keep studying", "Padhai jaari rakhein"), {
+                        beginStudy(ctx, session.checkIns.lastOrNull { it.topic != null }?.topic ?: session.subject)
+                        onDone()
+                    }, Modifier.testTag("keepStudying"))
+                }
             }
         }
     }

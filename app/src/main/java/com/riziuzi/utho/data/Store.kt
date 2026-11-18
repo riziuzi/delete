@@ -92,6 +92,14 @@ class Store private constructor(context: Context) {
         found
     }
 
+    /** Removes the check-in with this time (an unanswered one leaves no entry). */
+    fun removeCheckIn(timeMs: Long) = change {
+        for (i in sessionsList.indices) {
+            val s = sessionsList[i]
+            if (s.checkIns.any { it.timeMs == timeMs }) sessionsList[i] = s.copy(checkIns = s.checkIns.filter { it.timeMs != timeMs })
+        }
+    }
+
     /** The latest missed check-in that still has no answer. */
     fun latestMissed(): CheckIn? = synchronized(lock) {
         sessionsList.flatMap { it.checkIns }.filter { it.kind == CheckInKind.MISSED }.maxByOrNull { it.timeMs }

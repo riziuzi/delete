@@ -15,6 +15,9 @@ object AlarmScheduler {
     const val ACTION_WAKE = "com.riziuzi.utho.WAKE"
     const val ACTION_AWAKE_CHECK = "com.riziuzi.utho.AWAKE_CHECK"
     const val ACTION_CHECK_IN = "com.riziuzi.utho.CHECK_IN"
+    const val ACTION_CHECK_IN_DEADLINE = "com.riziuzi.utho.CHECK_IN_DEADLINE"
+    const val ACTION_TEST_POPUP = "com.riziuzi.utho.TEST_POPUP"
+    const val EXTRA_TIME = "time"
     const val ACTION_STUDY_REMINDER = "com.riziuzi.utho.STUDY_REMINDER"
     const val ACTION_JOURNAL_REMINDER = "com.riziuzi.utho.JOURNAL_REMINDER"
 
@@ -27,15 +30,27 @@ object AlarmScheduler {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** Exact, works in battery saver. Falls back to an alarm-clock alarm when exact alarms are not allowed. */
+    /**
+     * On time, always: an alarm-clock alarm. (The "allow while idle" kind can be held back for several minutes
+     * while the phone sits locked, which made check-ins arrive late.)
+     */
     private fun exact(ctx: Context, atMs: Long, pi: PendingIntent) {
-        val am = am(ctx)
-        if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
-            am.setAlarmClock(AlarmManager.AlarmClockInfo(atMs, null), pi)
-        } else {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
-        }
+        val show = Notifications.activityPending(ctx, 102, Intent(ctx, MainActivity::class.java))
+        am(ctx).setAlarmClock(AlarmManager.AlarmClockInfo(atMs, show), pi)
     }
+
+    private fun deadlinePi(ctx: Context, timeMs: Long) = PendingIntent.getBroadcast(
+        ctx, 6, Intent(ctx, AlarmReceiver::class.java).setAction(ACTION_CHECK_IN_DEADLINE).putExtra(EXTRA_TIME, timeMs),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** If the check-in saved at [timeMs] is still unanswered at [atMs] (the pop-up never showed), study stops. */
+    fun scheduleDeadline(ctx: Context, atMs: Long, timeMs: Long) = exact(ctx, atMs, deadlinePi(ctx, timeMs))
+
+    fun cancelDeadline(ctx: Context) = am(ctx).cancel(deadlinePi(ctx, 0))
+
+    /** Settings › test the pop-up: it comes in [delayMs] (lock the phone to see it on the lock screen). */
+    fun scheduleTestPopup(ctx: Context, delayMs: Long) = exact(ctx, System.currentTimeMillis() + delayMs, broadcast(ctx, ACTION_TEST_POPUP, 7))
 
     fun nextWakeMs(ctx: Context): Long? {
         val p = Prefs(ctx)

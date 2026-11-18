@@ -187,6 +187,9 @@ class ScreenTour {
         shot("18-settings-top")
         rule.onNodeWithText("Offline voice").performScrollTo()
         shot("19-settings-voice")
+        tag("openPopupSetup").performScrollTo().performClick()
+        shot("19d-popup-setup")
+        back()
         // Interval on the hour / minute / second dials: 1 h 45 min.
         tag("checkInEvery").performScrollTo().performClick()
         shot("19a-dial-open", 500)
@@ -248,23 +251,21 @@ class ScreenTour {
             org.junit.Assert.assertEquals(3, it.mood)
         }
 
-        // ---- the timed pop-up when nobody answers: 15 s, then saved as missed (not counted) and closes
-        val before = store.activeSession()!!.checkIns.size
+        // ---- the timed pop-up when nobody answers: listens, then study stops and the interval leaves no entry
+        val sessionBefore = store.activeSession()!!
         startActivity(Intent(ctx, CheckInActivity::class.java))
         passTime(7_000)
         shot("29c-checkin-waiting", 100)
         passTime(9_000)
-        shot("29d-checkin-no-answer", 100)
-        val deadline = System.currentTimeMillis() + 15_000
-        while (store.activeSession()!!.checkIns.size == before && System.currentTimeMillis() < deadline) passTime(500)
-        store.activeSession()!!.checkIns.let {
-            org.junit.Assert.assertEquals(before + 1, it.size)
-            org.junit.Assert.assertNull(it.last().topic)
-            org.junit.Assert.assertNull(it.last().mood)
-            org.junit.Assert.assertEquals("", it.last().text)
-            org.junit.Assert.assertEquals(CheckInKind.MISSED, it.last().kind)
+        shot("29d-checkin-no-answer-stops-study", 100)
+        val stopDeadline = System.currentTimeMillis() + 15_000
+        while (store.activeSession() != null && System.currentTimeMillis() < stopDeadline) passTime(500)
+        org.junit.Assert.assertNull("study stops when nothing is said", store.activeSession())
+        store.sessions.single { it.id == sessionBefore.id }.let {
+            org.junit.Assert.assertTrue("no entry for the unanswered interval", it.checkIns.none { c -> c.kind == CheckInKind.MISSED })
+            org.junit.Assert.assertEquals(com.riziuzi.utho.core.Stats.lastConfirmedMs(sessionBefore), it.endMs)
         }
-        passTime(4_000) // the "nothing heard" screen closes by itself
+        passTime(7_000) // the "study stopped" screen closes by itself
 
         // ---- still awake?
         startActivity(Intent(ctx, AwakeCheckActivity::class.java))
