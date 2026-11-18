@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -63,8 +62,10 @@ class ScreenTour {
     private fun click(text: String) = rule.onNodeWithText(text, useUnmergedTree = true).performClick()
     private fun tag(t: String) = rule.onNodeWithTag(t, useUnmergedTree = true)
 
+    /** System back gesture; unlike Espresso it doesn't need the window to have focus. */
     private fun back() {
-        Espresso.pressBack()
+        instr.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        Thread.sleep(600)
         rule.waitForIdle()
     }
 

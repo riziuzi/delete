@@ -8,6 +8,12 @@ APK=app/build/outputs/apk/debug/app-x86_64-debug.apk
 TEST=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
 adb wait-for-device
+until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 2; done
+# The emulator's launcher sometimes freezes on CI; hide system "isn't responding" dialogs so they don't cover the app.
+adb shell settings put global hide_error_dialogs 1
+adb shell settings put secure anr_show_background 0 || true
+sleep 20
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 adb shell getprop ro.build.version.release > "$OUT/emulator.txt"
 adb install -r -g "$APK"
 adb install -r "$TEST"
