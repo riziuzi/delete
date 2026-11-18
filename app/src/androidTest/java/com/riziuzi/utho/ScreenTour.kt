@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
