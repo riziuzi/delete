@@ -64,6 +64,20 @@ object JournalWriter {
         }
     }
 
+    /** A time span from the dials: "1 h 5 min 30 s", "30 min", "45 s" / "1 ghanta 5 minute 30 second". */
+    fun span(totalSec: Int, lang: Lang): String {
+        val h = totalSec / 3600
+        val m = totalSec % 3600 / 60
+        val s = totalSec % 60
+        val parts = when (lang) {
+            Lang.EN -> listOfNotNull(if (h > 0) "$h h" else null, if (m > 0) "$m min" else null, if (s > 0) "$s s" else null)
+            Lang.HI -> listOfNotNull(
+                if (h > 0) (if (h == 1) "1 ghanta" else "$h ghante") else null, if (m > 0) "$m minute" else null, if (s > 0) "$s second" else null,
+            )
+        }
+        return parts.joinToString(" ").ifEmpty { if (lang == Lang.EN) "0 s" else "0 second" }
+    }
+
     /** m:ss in English, "1 minute 52 second" in Hinglish. */
     fun seconds(totalSec: Int, lang: Lang): String {
         val m = totalSec / 60

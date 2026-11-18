@@ -1,6 +1,13 @@
 package com.riziuzi.utho.ui
 
 import android.Manifest
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.LinearProgressIndicator
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -8,6 +15,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -284,7 +292,6 @@ fun SettingsScreen(nav: Nav) {
     val prefs = remember { Prefs(ctx) }
     val lang = remember(tick) { prefs.lang }
     val theme = remember(tick) { prefs.theme }
-    val interval = remember(tick) { prefs.checkInMin }
     val voice = remember(tick) { prefs.voiceLang }
     var beep by remember { mutableFloatStateOf(prefs.beepVolume.toFloat()) }
     val emergency = remember(tick) { prefs.emergencySec }
@@ -446,37 +453,12 @@ fun SettingsScreen(nav: Nav) {
 @Composable
 private fun OfflineVoice() {
     val ctx = LocalContext.current
-    val lang = LocalLang.current
     val onDevice = remember { VoiceRecognizer.onDeviceAvailable(ctx) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var requested by remember { mutableStateOf(false) }
     Text(tr("Offline voice", "Offline voice"), fontSize = 16.sp)
     if (Build.VERSION.SDK_INT >= 33 && onDevice) {
-        LaunchedEffect(requested) {
-            VoiceRecognizer.checkSupport(ctx, VoiceLang.MIX) { s ->
-                status = if (s == null) null else {
-                    val hi = s.installed.any { it.startsWith("hi") }
-                    val pending = s.pending.any { it.startsWith("hi") }
-                    when {
-                        hi -> lang.t2("Hindi offline voice: installed", "Hindi offline voice: installed hai")
-                        pending -> lang.t2("Hindi offline voice: downloading…", "Hindi offline voice: download ho raha hai…")
-                        else -> lang.t2("Hindi offline voice: not installed", "Hindi offline voice: install nahi hai")
-                    }
-                }
-            }
-        }
-        status?.let { Muted(it) }
-        ButtonsRow {
-            SecondButton("Hindi pack", {
-                VoiceRecognizer.downloadModel(ctx, "hi-IN")
-                requested = !requested
-            }, Modifier.weight(1f))
-            SecondButton("English pack", {
-                VoiceRecognizer.downloadModel(ctx, "en-IN")
-                requested = !requested
-            }, Modifier.weight(1f))
-        }
-        Muted(tr("Tap to download once on Wi-Fi, then check-ins work without internet.", "Ek baar Wi-Fi par tap karke download karein, phir bina internet chalega."))
+        PackRow("Hindi", "hi-IN")
+        PackRow("English (India)", "en-IN")
+        Muted(tr("With these on the phone, check-ins work without internet.", "Yeh phone mein hon to check-in bina internet ke chalte hain."))
     } else {
         Muted(
             tr(
@@ -484,6 +466,85 @@ private fun OfflineVoice() {
                 "Voice aapke phone ka system use karta hai. Offline ke liye Google app › Settings › Voice › Offline speech recognition mein Hindi download karein.",
             ),
         )
+    }
+}
+
+private enum class PackUi { CHECKING, INSTALLED, NOT_INSTALLED, DOWNLOADING, WAITING, FAILED, UNAVAILABLE }
+
+/** One voice pack: ✓ Installed, a Download button, or a progress bar while it downloads. */
+@androidx.annotation.RequiresApi(33)
+@Composable
+private fun PackRow(name: String, tag: String) {
+    val ctx = LocalContext.current
+    val cs = MaterialTheme.colorScheme
+    var ui by remember { mutableStateOf(PackUi.CHECKING) }
+    var percent by remember { mutableStateOf<Int?>(null) }
+    var check by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(check) {
+        VoiceRecognizer.packStatus(ctx, tag) { st ->
+            ui = when (st) {
+                VoiceRecognizer.Companion.Pack.INSTALLED -> PackUi.INSTALLED
+                VoiceRecognizer.Companion.Pack.DOWNLOADING -> if (ui == PackUi.WAITING) PackUi.WAITING else PackUi.DOWNLOADING
+                VoiceRecognizer.Companion.Pack.NOT_INSTALLED -> if (ui == PackUi.DOWNLOADING || ui == PackUi.WAITING || ui == PackUi.FAILED) ui else PackUi.NOT_INSTALLED
+                VoiceRecognizer.Companion.Pack.UNAVAILABLE -> PackUi.UNAVAILABLE
+                null -> if (ui == PackUi.CHECKING) PackUi.UNAVAILABLE else ui
+            }
+        }
+    }
+    // While it downloads, look again every few seconds until it's installed.
+    LaunchedEffect(ui) {
+        if (ui == PackUi.DOWNLOADING || ui == PackUi.WAITING) {
+            kotlinx.coroutines.delay(3000)
+            check++
+        }
+    }
+
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("pack-$tag"), verticalAlignment = Alignment.CenterVertically) {
+        Text(name, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        when (ui) {
+            PackUi.CHECKING -> Muted("…")
+            PackUi.INSTALLED -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val green = if (cs.background.luminance() < 0.5f) androidx.compose.ui.graphics.Color(0xFF81C784) else androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = green, modifier = Modifier.size(20.dp))
+                Text(tr("Installed", "Installed"), color = green, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+            PackUi.NOT_INSTALLED, PackUi.FAILED -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (ui == PackUi.FAILED) Text(tr("Didn't finish", "Poora nahi hua"), color = cs.error, fontSize = 13.sp)
+                OutlinedButton(
+                    onClick = {
+                        ui = PackUi.DOWNLOADING
+                        percent = null
+                        VoiceRecognizer.downloadPack(ctx, tag, object : VoiceRecognizer.Companion.DownloadListener {
+                            override fun onProgress(percent: Int) = setPercent(percent)
+                            override fun onScheduled() = setUi(PackUi.WAITING)
+                            override fun onDone() = setUi(PackUi.INSTALLED)
+                            override fun onFailed() = setUi(PackUi.FAILED)
+                            private fun setPercent(p: Int) {
+                                percent = p
+                                if (p >= 100) ui = PackUi.INSTALLED
+                            }
+                            private fun setUi(v: PackUi) {
+                                ui = v
+                            }
+                        })
+                    },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.heightIn(min = 36.dp).testTag("download-$tag"),
+                ) {
+                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(" " + tr(if (ui == PackUi.FAILED) "Retry" else "Download", if (ui == PackUi.FAILED) "Phir try" else "Download"), fontSize = 14.sp)
+                }
+            }
+            PackUi.DOWNLOADING -> Column(Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val p = percent
+                if (p != null) LinearProgressIndicator(progress = { p / 100f }, modifier = Modifier.fillMaxWidth())
+                else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Muted(if (p != null) "$p%" else tr("Downloading…", "Download ho raha hai…"))
+            }
+            PackUi.WAITING -> Muted(tr("Waiting for Wi-Fi", "Wi-Fi ka intezaar"))
+            PackUi.UNAVAILABLE -> Muted(tr("Not offered offline", "Offline nahi milta"))
+        }
     }
 }
 
@@ -553,39 +614,54 @@ fun LearnedScreen(nav: Nav) {
     }
 }
 
-/** How often the check-in pop-up comes while studying, and how long it listens. Used in Settings and the study screen. */
-@OptIn(ExperimentalLayoutApi::class)
+/** How often the check-in pop-up comes while studying (hour/minute/second dial), and how long it listens. */
 @Composable
 fun CheckInTiming() {
     val ctx = LocalContext.current
+    val lang = LocalLang.current
     val prefs = remember { Prefs(ctx) }
-    var every by remember { mutableIntStateOf(prefs.checkInMin) }
+    var on by remember { mutableStateOf(prefs.checkInOn) }
+    var every by remember { mutableIntStateOf(prefs.checkInSec) }
     var listen by remember { mutableIntStateOf(prefs.listenSeconds) }
-    Text(tr("While studying, ask me every", "Padhai ke dauraan har kitni der mein poochhein"), fontSize = 16.sp)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(0, 10, 15, 20, 25, 30, 45, 60, 90).forEach { m ->
-            OptionTile(if (m == 0) tr("Off", "Off") else "$m min", m == every, {
-                every = m
-                prefs.checkInMin = m
-                AlarmScheduler.scheduleNextCheckIn(ctx)
-            }, minHeight = 40.dp, modifier = Modifier.testTag("every-$m"))
+    var pickEvery by remember { mutableStateOf(false) }
+    var pickListen by remember { mutableStateOf(false) }
+    ToggleRow(tr("Check-ins while studying", "Padhai ke dauraan check-in"), null, on) {
+        on = it
+        prefs.checkInOn = it
+        AlarmScheduler.scheduleNextCheckIn(ctx)
+    }
+    if (on) {
+        Box(Modifier.testTag("checkInEvery")) {
+            NavRow(tr("Ask me every", "Kitni der mein poochhein"), com.riziuzi.utho.core.JournalWriter.span(every, lang), { pickEvery = true })
+        }
+        Box(Modifier.testTag("checkInListen")) {
+            NavRow(tr("The pop-up listens for", "Pop-up kitni der sunega"), com.riziuzi.utho.core.JournalWriter.span(listen, lang), { pickListen = true })
         }
     }
-    if (every > 0) {
-        Text(tr("The pop-up listens for", "Pop-up kitni der sunega"), fontSize = 16.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(10, 15, 20, 30, 45).forEach { s ->
-                OptionTile("$s sec", s == listen, {
-                    listen = s
-                    prefs.listenSeconds = s
-                }, minHeight = 40.dp, modifier = Modifier.testTag("listen-$s"))
+    Muted(tr("Notes you start yourself (Speak) keep listening until you tap Done.", "Jo note aap khud shuru karte hain (Bolein), woh Done dabane tak sunta rahega."))
+    if (pickEvery) {
+        DurationDialog(
+            tr("Ask me every", "Kitni der mein poochhein"), every, hours = true, minSec = 60, maxSec = 23 * 3600 + 59 * 60 + 59,
+            note = null, onDismiss = { pickEvery = false },
+        ) {
+            every = it
+            prefs.checkInSec = it
+            if (listen >= it) {
+                listen = (it - 10).coerceAtLeast(5)
+                prefs.listenSeconds = listen
             }
+            AlarmScheduler.scheduleNextCheckIn(ctx)
+            pickEvery = false
         }
-        Muted(
-            tr(
-                "Notes you start yourself (Speak) keep listening until you tap Done.",
-                "Jo note aap khud shuru karte hain (Bolein), woh Done dabane tak sunta rahega.",
-            ),
-        )
+    }
+    if (pickListen) {
+        DurationDialog(
+            tr("The pop-up listens for", "Pop-up kitni der sunega"), listen, hours = false, minSec = 5, maxSec = minOf(5 * 60, every - 10),
+            note = tr("If you stop talking, it finishes early.", "Bolna band karenge to pehle hi ruk jaayega."), onDismiss = { pickListen = false },
+        ) {
+            listen = it
+            prefs.listenSeconds = it
+            pickListen = false
+        }
     }
 }

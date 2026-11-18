@@ -66,14 +66,14 @@ object AlarmScheduler {
         am(ctx).cancel(broadcast(ctx, ACTION_CHECK_IN, 3))
     }
 
-    /** Next check-in [Prefs.checkInMin] after [fromMs], if check-ins are on and a session runs. */
+    /** Next check-in [Prefs.checkInEverySec] after [fromMs], if check-ins are on and a session runs. */
     fun scheduleNextCheckIn(ctx: Context, fromMs: Long = System.currentTimeMillis()) {
         val p = Prefs(ctx)
-        if (p.checkInMin <= 0 || Store.get(ctx).activeSession() == null) {
+        if (p.checkInEverySec <= 0 || Store.get(ctx).activeSession() == null) {
             cancelCheckIn(ctx)
             return
         }
-        scheduleCheckIn(ctx, fromMs + p.checkInMin * 60_000L)
+        scheduleCheckIn(ctx, fromMs + p.checkInEverySec * 1000L)
     }
 
     private fun nextMinuteOfDay(minuteOfDay: Int): Long =

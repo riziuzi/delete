@@ -182,6 +182,14 @@ class JournalTest {
         assertTrue(hi.contains("subah 9:30 · Polity · Accha: Article 21 padha"))
     }
 
+    @Test fun spansFromTheDials() {
+        assertEquals("1 h 30 min 30 s", JournalWriter.span(5430, Lang.EN))
+        assertEquals("30 min", JournalWriter.span(1800, Lang.EN))
+        assertEquals("45 s", JournalWriter.span(45, Lang.EN))
+        assertEquals("1 ghanta 5 minute", JournalWriter.span(3900, Lang.HI))
+        assertEquals("2 ghante 30 second", JournalWriter.span(7230, Lang.HI))
+    }
+
     @Test fun emptyDay() {
         val p = JournalWriter.write(DaySummary(day, emptyList(), 0, emptyList(), 0, 0, 360, emptyList()), IST, Lang.EN)
         assertEquals(listOf("Nothing recorded for this day yet."), p)

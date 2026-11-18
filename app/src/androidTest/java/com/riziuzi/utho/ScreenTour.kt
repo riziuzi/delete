@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -186,6 +187,19 @@ class ScreenTour {
         shot("18-settings-top")
         rule.onNodeWithText("Offline voice").performScrollTo()
         shot("19-settings-voice")
+        // Interval on the hour / minute / second dials: 1 h 45 min.
+        tag("checkInEvery").performScrollTo().performClick()
+        shot("19a-dial-open", 500)
+        tag("wheel-hours").performScrollToIndex(1)
+        tag("wheel-min").performScrollToIndex(45)
+        shot("19a-dial-set", 500)
+        tag("dialOk").performClick()
+        rule.waitForIdle()
+        org.junit.Assert.assertEquals(3600 + 45 * 60, Prefs(ctx).checkInSec)
+        tag("checkInListen").performScrollTo().performClick()
+        shot("19a-listen-dial", 500)
+        rule.onNodeWithText("Cancel", useUnmergedTree = true).performClick()
+        Prefs(ctx).checkInSec = 30 * 60
         tag("sound-chime").performScrollTo().performClick()
         shot("19b-settings-sound")
         rule.onNodeWithText("What Utho has learned").performScrollTo().performClick()

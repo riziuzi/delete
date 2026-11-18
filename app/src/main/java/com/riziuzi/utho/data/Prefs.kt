@@ -125,9 +125,18 @@ class Prefs(context: Context) {
         get() = p.getInt("listenSeconds", 15)
         set(v) = edit { putInt("listenSeconds", v) }
 
-    var checkInMin: Int
-        get() = p.getInt("checkInMin", 30)
-        set(v) = edit { putInt("checkInMin", v) }
+    /** Check-ins while studying on or off (the chosen interval is kept when off). */
+    var checkInOn: Boolean
+        get() = p.getBoolean("checkInOn", p.getInt("checkInMin", 30) > 0)
+        set(v) = edit { putBoolean("checkInOn", v) }
+
+    /** Time between check-ins, in seconds, as set on the hour/minute/second dial. */
+    var checkInSec: Int
+        get() = p.getInt("checkInSec", p.getInt("checkInMin", 30).let { if (it > 0) it * 60 else 30 * 60 })
+        set(v) = edit { putInt("checkInSec", v) }
+
+    /** Seconds between check-ins, or 0 when check-ins are off. */
+    val checkInEverySec: Int get() = if (checkInOn) checkInSec else 0
 
     var nextCheckInMs: Long
         get() = p.getLong("nextCheckInMs", -1L)

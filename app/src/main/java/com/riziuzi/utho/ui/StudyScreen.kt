@@ -72,12 +72,14 @@ fun StudyScreen(nav: Nav) {
             }
         }
 
-        val interval = remember(tick) { prefs.checkInMin }
+        val interval = remember(tick) { prefs.checkInEverySec }
+        val span = JournalWriter.span(interval, lang)
+        val listenSpan = JournalWriter.span(remember(tick) { prefs.listenSeconds }, lang)
         val next = remember(tick) { prefs.nextCheckInMs }
         CardBox {
             if (interval > 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(tr("Voice check-in every $interval min", "Har $interval minute par voice check-in"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(tr("Voice check-in every $span", "Har $span par voice check-in"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     SmallTextButton(tr("Change", "Badlein")) { editTiming = true }
                 }
                 if (next > now) {
@@ -85,8 +87,8 @@ fun StudyScreen(nav: Nav) {
                 }
                 Muted(
                     tr(
-                        "A pop-up listens for ${prefs.listenSeconds} seconds. No answer: those $interval minutes aren't counted until you answer.",
-                        "Pop-up ${prefs.listenSeconds} second sunega. Jawaab nahi diya to woh $interval minute tab tak count nahi honge jab tak jawaab na dein.",
+                        "A pop-up listens for $listenSpan. No answer: those $span aren't counted until you answer.",
+                        "Pop-up $listenSpan sunega. Jawaab nahi diya to woh $span tab tak count nahi honge jab tak jawaab na dein.",
                     ),
                 )
             } else {

@@ -260,7 +260,7 @@ fun TodayScreen(nav: Nav) {
             onDismiss = { pickSubject = false },
             onPick = { s ->
                 pickSubject = false
-                if (prefs.checkInMin > 0 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                if (prefs.checkInEverySec > 0 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     micLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
                 beginStudy(ctx, s)

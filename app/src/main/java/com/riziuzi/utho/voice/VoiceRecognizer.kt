@@ -296,19 +296,98 @@ class VoiceRecognizer(
 
         /** Asks Android to download the on-device model for this language (Android 13+). */
         @RequiresApi(33)
-        fun downloadModel(context: Context, tag: String): Boolean {
+        enum class Pack { INSTALLED, DOWNLOADING, NOT_INSTALLED, UNAVAILABLE }
+
+        private fun packIntent(tag: String) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+
+        private fun has(list: List<String>, tag: String) = list.any { it.equals(tag, true) || it.substringBefore('-').equals(tag.substringBefore('-'), true) }
+
+        /** Is the offline voice pack for [tag] ("hi-IN") on the phone, downloading, or available to download? */
+        @RequiresApi(33)
+        fun packStatus(context: Context, tag: String, result: (Pack?) -> Unit) {
+            val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull()
+            if (r == null) {
+                result(null)
+                return
+            }
+            runCatching {
+                r.checkRecognitionSupport(
+                    packIntent(tag), ContextCompat.getMainExecutor(context),
+                    object : RecognitionSupportCallback {
+                        override fun onSupportResult(s: RecognitionSupport) {
+                            result(
+                                when {
+                                    has(s.installedOnDeviceLanguages, tag) -> Pack.INSTALLED
+                                    has(s.pendingOnDeviceLanguages, tag) -> Pack.DOWNLOADING
+                                    has(s.supportedOnDeviceLanguages, tag) -> Pack.NOT_INSTALLED
+                                    else -> Pack.UNAVAILABLE
+                                },
+                            )
+                            r.destroy()
+                        }
+
+                        override fun onError(error: Int) {
+                            result(null)
+                            r.destroy()
+                        }
+                    },
+                )
+            }.onFailure {
+                result(null)
+                r.destroy()
+            }
+        }
+
+        /** What a pack download reports back (Android 14+ gives a percentage; 13 only starts it). */
+        interface DownloadListener {
+            fun onProgress(percent: Int) {}
+            fun onScheduled() {}
+            fun onDone() {}
+            fun onFailed() {}
+        }
+
+        /** Starts downloading the offline voice pack for [tag]. Android has no way for an app to pause or cancel it. */
+        @RequiresApi(33)
+        fun downloadPack(context: Context, tag: String, listener: DownloadListener) {
             // Try on-device again once a pack is being installed.
             context.getSharedPreferences(MEMO, Context.MODE_PRIVATE).edit().clear().apply()
-            val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull() ?: return false
-            return runCatching {
-                r.triggerModelDownload(
-                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag),
-                )
+            val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull()
+            if (r == null) {
+                listener.onFailed()
+                return
+            }
+            if (Build.VERSION.SDK_INT >= 34) {
+                val ok = runCatching {
+                    r.triggerModelDownload(
+                        packIntent(tag), ContextCompat.getMainExecutor(context),
+                        object : android.speech.ModelDownloadListener {
+                            override fun onProgress(completedPercent: Int) = listener.onProgress(completedPercent)
+                            override fun onSuccess() {
+                                listener.onDone()
+                                r.destroy()
+                            }
+                            override fun onScheduled() {
+                                listener.onScheduled()
+                                r.destroy()
+                            }
+                            override fun onError(error: Int) {
+                                listener.onFailed()
+                                r.destroy()
+                            }
+                        },
+                    )
+                }.isSuccess
+                if (!ok) {
+                    r.destroy()
+                    listener.onFailed()
+                }
+            } else {
+                val ok = runCatching { r.triggerModelDownload(packIntent(tag)) }.isSuccess
                 Handler(Looper.getMainLooper()).postDelayed({ r.destroy() }, 3000)
-                true
-            }.getOrDefault(false)
+                if (!ok) listener.onFailed() // otherwise the caller watches packStatus until it's installed
+            }
         }
     }
 }

@@ -130,7 +130,7 @@ class CheckInActivity : ComponentActivity() {
         val prefs = Prefs(this)
         setContent {
             UthoTheme(prefs.theme, prefs.lang) {
-                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin, prefs.listenSeconds) { finish() }
+                CheckInScreen(mode, session, target, typeFirst, prefs.checkInSec, prefs.listenSeconds) { finish() }
             }
         }
     }
@@ -172,6 +172,7 @@ private fun CheckInScreen(
     session: StudySession?,
     target: CheckIn?,
     typeFirst: Boolean,
+    /** Seconds between timed check-ins. */
     interval: Int,
     listenSeconds: Int,
     onDone: () -> Unit,
@@ -391,11 +392,14 @@ private fun CheckInScreen(
 
     val question = when {
         target != null && interval > 0 -> {
-            val a = JournalWriter.clock(target.timeMs - interval * 60_000L, Summaries.zone, lang)
+            val a = JournalWriter.clock(target.timeMs - interval * 1000L, Summaries.zone, lang)
             val b = JournalWriter.clock(target.timeMs, Summaries.zone, lang)
             tr("What did you study from $a to $b?", "$a se $b tak kya padha?")
         }
-        timed && interval > 0 -> tr("What did you study in the last $interval min? How's your mood?", "Pichhle $interval min mein kya padha? Mood kaisa hai?")
+        timed && interval > 0 -> {
+            val span = JournalWriter.span(interval, lang)
+            tr("What did you study in the last $span? How's your mood?", "Pichhle $span mein kya padha? Mood kaisa hai?")
+        }
         else -> tr("What did you study? How's your mood?", "Kya padha? Mood kaisa hai?")
     }
 
@@ -530,8 +534,8 @@ private fun CheckInScreen(
                 }
                 Muted(
                     tr(
-                        "These $interval minutes won't count until you answer. Tap the notification to speak or type it later.",
-                        "Jab tak jawaab nahi denge, yeh $interval minute count nahi honge. Baad mein notification par tap karke bolein ya likhein.",
+                        "These ${JournalWriter.span(interval, lang)} won't count until you answer. Tap the notification to speak or type it later.",
+                        "Jab tak jawaab nahi denge, yeh ${JournalWriter.span(interval, lang)} count nahi honge. Baad mein notification par tap karke bolein ya likhein.",
                     ),
                     textAlign = TextAlign.Center,
                 )

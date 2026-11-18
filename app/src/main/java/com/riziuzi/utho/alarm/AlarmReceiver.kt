@@ -7,6 +7,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.riziuzi.utho.core.CheckIn
 import com.riziuzi.utho.core.CheckInKind
+import com.riziuzi.utho.core.JournalWriter
 import com.riziuzi.utho.core.t
 import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
@@ -37,14 +38,14 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             AlarmScheduler.ACTION_CHECK_IN -> {
                 val session = Store.get(ctx).activeSession()
-                if (session == null || prefs.checkInMin <= 0) {
+                if (session == null || prefs.checkInEverySec <= 0) {
                     AlarmScheduler.cancelCheckIn(ctx)
                     return
                 }
                 // Forgot to stop? After 3 unanswered check-ins, end the session at the last sign of studying.
                 val now = System.currentTimeMillis()
                 val lastSign = maxOf(session.startMs, session.checkIns.filter { it.text.isNotBlank() || it.kind == CheckInKind.SWITCH }.maxOfOrNull { it.timeMs } ?: 0L)
-                val intervalMs = prefs.checkInMin * 60_000L
+                val intervalMs = prefs.checkInEverySec * 1000L
                 if (now - lastSign > 3 * intervalMs + 5 * 60_000L) {
                     Store.get(ctx).endSession(session.id, lastSign)
                     AlarmScheduler.cancelCheckIn(ctx)
@@ -64,7 +65,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 val n = Notifications.fullScreen(
                     ctx, Notifications.ID_CHECKIN, Notifications.CH_CHECKIN,
                     lang.t("Quick check-in", "Quick check-in"),
-                    lang.t("Say what you studied in the last ${prefs.checkInMin} min", "Bataiye pichhle ${prefs.checkInMin} minute mein kya padha aur mood kaisa hai"),
+                    lang.t("Say what you studied in the last ${JournalWriter.span(prefs.checkInEverySec, lang)}", "Bataiye pichhle ${JournalWriter.span(prefs.checkInEverySec, lang)} mein kya padha aur mood kaisa hai"),
                     CheckInActivity.timedIntent(ctx, now), NotificationCompat.CATEGORY_REMINDER,
                 )
                 Notifications.post(ctx, Notifications.ID_CHECKIN, n)
