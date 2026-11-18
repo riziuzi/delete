@@ -224,6 +224,39 @@ class ScreenTour {
         Prefs(ctx).lang = Lang.EN
         rule.waitForIdle()
 
+        // ---- every main screen in the dark theme
+        Prefs(ctx).theme = "dark"
+        rule.waitForIdle()
+        tag("tab-today").performClick()
+        shot("40-dark-today")
+        tag("startStudy").performClick()
+        shot("41-dark-study")
+        back()
+        tag("alarmCard").performClick()
+        shot("42-dark-alarm")
+        back()
+        tag("tab-progress").performClick()
+        shot("43-dark-progress")
+        tag("day-${java.time.LocalDate.now().minusDays(1).dayOfMonth}").let {
+            runCatching { it.performClick() }.onFailure { tag("day-${java.time.LocalDate.now().dayOfMonth}").performClick() }
+        }
+        shot("44-dark-journal")
+        back()
+        tag("tab-group").performClick()
+        shot("45-dark-group")
+        tag("tab-today").performClick()
+        tag("avatar").performClick()
+        shot("46-dark-profile")
+        tag("openSettings").performClick()
+        shot("47-dark-settings")
+        tag("openPopupSetup").performScrollTo().performClick()
+        shot("48-dark-popup-setup")
+        back()
+        back()
+        back()
+        Prefs(ctx).theme = "system"
+        rule.waitForIdle()
+
         // ---- camera workout (practice)
         startActivity(WorkoutActivity.workoutIntent(ctx, Exercise.PUSHUP, 40, Level.EASY, record = false))
         shot("26-workout-pushups", 5000)

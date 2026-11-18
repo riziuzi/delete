@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -75,8 +76,14 @@ fun beginStudy(ctx: Context, subject: String) {
 }
 
 fun endStudy(ctx: Context) {
-    Store.get(ctx).activeSession()?.let { Store.get(ctx).endSession(it.id) }
+    val store = Store.get(ctx)
+    store.activeSession()?.let { s ->
+        // You stopped it yourself, so you were there: a check-in still waiting is simply dropped.
+        s.checkIns.filter { it.kind == com.riziuzi.utho.core.CheckInKind.MISSED }.forEach { store.removeCheckIn(it.timeMs) }
+        store.endSession(s.id)
+    }
     AlarmScheduler.cancelCheckIn(ctx)
+    AlarmScheduler.cancelDeadline(ctx)
     Notifications.cancel(ctx, Notifications.ID_SESSION)
     Notifications.cancel(ctx, Notifications.ID_CHECKIN)
 }
@@ -176,7 +183,7 @@ fun TodayScreen(nav: Nav) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimary), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(if (active != null) Icons.Outlined.Timer else Icons.Filled.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
             Column {
                 if (active != null) {

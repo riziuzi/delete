@@ -70,8 +70,9 @@ object CheckIns {
         AlarmScheduler.cancelDeadline(ctx)
         Notifications.cancel(ctx, Notifications.ID_CHECKIN)
         val session = store.activeSession() ?: return null
+        // Only for a check-in of the study running now that is still unanswered (not one from an earlier session).
         val pending = session.checkIns.firstOrNull { it.timeMs == timeMs }
-        if (pending != null && pending.kind != CheckInKind.MISSED) return null // answered meanwhile
+        if (pending == null || pending.kind != CheckInKind.MISSED) return null
         val endAt = Stats.lastConfirmedMs(session)
         // Drop every unanswered placeholder after that point: no entry for these intervals.
         session.checkIns.filter { it.kind == CheckInKind.MISSED && it.timeMs >= endAt }.forEach { store.removeCheckIn(it.timeMs) }

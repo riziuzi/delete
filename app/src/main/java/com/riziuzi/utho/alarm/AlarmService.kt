@@ -36,7 +36,11 @@ class AlarmService : Service() {
             ring, NotificationCompat.CATEGORY_ALARM, ongoing = true,
         )
         ServiceCompat.startForeground(this, Notifications.ID_ALARM, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        if (player == null) startRinging()
+        if (player == null) {
+            startRinging()
+            // While the phone is in use Android shows only a banner; open the workout screen directly where allowed.
+            runCatching { startActivity(WorkoutActivity.alarmIntent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
         return START_STICKY
     }
 

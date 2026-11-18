@@ -45,7 +45,9 @@ fun ignoresBatteryLimits(ctx: Context): Boolean =
     ctx.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName)
 
 /** Everything Android itself lets us check for the check-in pop-up to open on its own. */
-fun popupReady(ctx: Context): Boolean = !needsFullScreenPermission(ctx) && canOpenOverApps(ctx)
+fun notificationsAllowed(ctx: Context): Boolean = androidx.core.app.NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+
+fun popupReady(ctx: Context): Boolean = notificationsAllowed(ctx) && !needsFullScreenPermission(ctx) && canOpenOverApps(ctx)
 
 private fun open(ctx: Context, intent: Intent, fallback: Intent? = null) {
     runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.onFailure {
@@ -85,6 +87,7 @@ fun rememberResumeTick(): Int {
 fun PopupSetupScreen(nav: Nav) {
     val ctx = LocalContext.current
     val refresh = rememberResumeTick()
+    val notifications = remember(refresh) { notificationsAllowed(ctx) }
     val fullScreen = remember(refresh) { !needsFullScreenPermission(ctx) }
     val overApps = remember(refresh) { canOpenOverApps(ctx) }
     val battery = remember(refresh) { ignoresBatteryLimits(ctx) }
@@ -98,6 +101,17 @@ fun PopupSetupScreen(nav: Nav) {
             ),
         )
         CardBox {
+            SetupRow(
+                notifications, tr("Notifications", "Notifications"),
+                tr("The pop-up arrives as a notification first.", "Pop-up pehle notification ke roop mein aata hai."),
+                "setup-notifications",
+            ) {
+                open(
+                    ctx, Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName),
+                    appDetails(ctx),
+                )
+            }
+            Divider()
             if (Build.VERSION.SDK_INT >= 34) {
                 SetupRow(
                     fullScreen, tr("Full-screen pop-up", "Full-screen pop-up"),
