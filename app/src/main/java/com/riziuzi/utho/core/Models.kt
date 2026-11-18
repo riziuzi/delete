@@ -20,6 +20,8 @@ data class CheckIn(
     val topic: String?,
     val kind: CheckInKind = CheckInKind.SPOKEN,
     val corrected: Boolean = false,
+    /** Mood said in this check-in (see [Moods]), null if none. */
+    val mood: Int? = null,
 )
 
 data class StudySession(

@@ -52,7 +52,7 @@ fun AlarmScreen(nav: Nav) {
     fun reschedule() = AlarmScheduler.scheduleWake(ctx)
 
     ScreenScaffold(
-        title = tr("Morning alarm", "सुबह का अलार्म"),
+        title = tr("Morning alarm", "Subah ka alarm"),
         onBack = { nav.back() },
         actions = {
             Switch(
@@ -68,11 +68,11 @@ fun AlarmScreen(nav: Nav) {
     ) {
         CardBox(onClick = { showTime = true }) {
             Text(clockText(hour, minute), fontSize = 52.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Muted(tr("Tap to change", "बदलने के लिए टैप करें"), Modifier.fillMaxWidth(), TextAlign.Center)
+            Muted(tr("Tap to change", "Badalne ke liye tap karein"), Modifier.fillMaxWidth(), TextAlign.Center)
         }
 
         val names = listOf(
-            tr("M", "सो"), tr("T", "मं"), tr("W", "बु"), tr("T", "गु"), tr("F", "शु"), tr("S", "श"), tr("S", "र"),
+            tr("M", "M"), tr("T", "T"), tr("W", "W"), tr("T", "T"), tr("F", "F"), tr("S", "S"), tr("S", "S"),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             names.forEachIndexed { i, n ->
@@ -90,9 +90,9 @@ fun AlarmScreen(nav: Nav) {
                 ) { Text(n, color = if (on) cs.onPrimary else cs.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
             }
         }
-        if (days == 0) Muted(tr("No day picked: rings once.", "कोई दिन नहीं चुना: एक बार बजेगा।"))
+        if (days == 0) Muted(tr("No day picked: rings once.", "Koi din select nahi: ek hi baar bajega."))
 
-        SectionLabel(tr("To stop it, do", "बंद करने के लिए करें"))
+        SectionLabel(tr("To stop it, do", "Band karne ke liye karein"))
         ExerciseGrid(exercise) { e ->
             prefs.exercise = e
             prefs.alarmTarget = if (e.isHold) 60 else 40
@@ -100,7 +100,7 @@ fun AlarmScreen(nav: Nav) {
 
         CardBox {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (exercise.isHold) tr("Seconds", "सेकंड") else tr("How many", "कितने"), fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Text(if (exercise.isHold) tr("Seconds", "Second") else tr("How many", "Kitne"), fontSize = 16.sp, modifier = Modifier.weight(1f))
                 val step = if (exercise.isHold) 15 else 5
                 Stepper(
                     "$target",
@@ -109,24 +109,24 @@ fun AlarmScreen(nav: Nav) {
                 )
             }
             Divider()
-            Text(tr("How strict", "कितनी सख्ती"), fontSize = 16.sp)
+            Text(tr("How strict", "Kitni sakhti"), fontSize = 16.sp)
             Segmented(
-                listOf(Level.EASY to tr("Easy", "आसान"), Level.NORMAL to tr("Normal", "सामान्य"), Level.STRICT to tr("Strict", "सख्त")),
+                listOf(Level.EASY to tr("Easy", "Aasaan"), Level.NORMAL to tr("Normal", "Normal"), Level.STRICT to tr("Strict", "Sakht")),
                 level, { prefs.level = it }, Modifier.fillMaxWidth(),
             )
             Divider()
             ToggleRow(
-                tr("\"Still awake?\" check", "\"जाग रहे हैं?\" जांच"),
-                tr("5 min later, rings again unless you tap", "5 मिनट बाद पूछेगा, टैप न करने पर फिर बजेगा"),
+                tr("\"Still awake?\" check", "\"Jaag rahe ho?\" check"),
+                tr("5 min later, rings again unless you tap", "5 minute baad poochhega, tap nahi kiya to phir bajega"),
                 awake,
             ) { prefs.awakeCheck = it }
         }
 
         ButtonsRow {
-            SecondButton(tr("Try it now", "अभी आज़माएं"), {
+            SecondButton(tr("Try it now", "Abhi try karein"), {
                 ctx.startActivity(WorkoutActivity.workoutIntent(ctx, exercise, target, level, record = false))
             }, Modifier.weight(1f).testTag("tryNow"))
-            BigButton(tr("Done", "हो गया"), { nav.back() }, Modifier.weight(1f))
+            BigButton(tr("Done", "Ho gaya"), { nav.back() }, Modifier.weight(1f))
         }
         Column {}
     }

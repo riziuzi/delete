@@ -13,10 +13,10 @@ import kotlin.random.Random
 object DemoData {
     private val notes = listOf(
         "Read Laxmikanth chapter on fundamental rights and writs.",
-        "मुगल साम्राज्य की प्रशासन व्यवस्था पढ़ी।",
+        "Mughal samrajya ki prashasan vyavastha padhi.",
         "Monsoon and the rivers of the Himalaya.",
         "Inflation, repo rate and RBI monetary policy.",
-        "संविधान के अनुच्छेद 14 से 18 दोहराए।",
+        "Samvidhan ke anuchchhed 14 se 18 dohraye.",
         "Reasoning puzzles and two comprehension passages.",
         "Wrote one essay introduction on climate change.",
     )

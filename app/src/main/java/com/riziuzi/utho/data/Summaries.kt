@@ -26,8 +26,10 @@ object Summaries {
         val from = Stats.dayStart(date, zone)
         val to = Stats.dayEnd(date, zone)
         val daySessions = sessions.filter { it.startMs < to && (it.endMs ?: now) > from }
-        val checkIns: List<CheckIn> = daySessions.flatMap { it.checkIns }
-            .filter { it.timeMs in from until to && it.text.isNotBlank() }
+        val spoken = daySessions.flatMap { it.checkIns }
+            .filter { it.timeMs in from until to && it.kind == com.riziuzi.utho.core.CheckInKind.SPOKEN }
+        val free = store.freeNotes.filter { it.timeMs in from until to }
+        val checkIns: List<CheckIn> = (spoken + free).filter { it.text.isNotBlank() }
         return DaySummary(
             date = date,
             workouts = workoutsOn(ctx, date),
@@ -37,6 +39,8 @@ object Summaries {
             sessionCount = daySessions.size,
             goalMinutes = Prefs(ctx).dailyGoalMin,
             checkIns = checkIns,
+            checkInsAsked = spoken.size,
+            checkInsAnswered = spoken.count { it.text.isNotBlank() },
         )
     }
 

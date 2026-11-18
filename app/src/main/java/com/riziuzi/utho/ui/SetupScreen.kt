@@ -67,8 +67,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-fun dateFormatter(lang: Lang, pattern: String): DateTimeFormatter =
-    DateTimeFormatter.ofPattern(pattern, if (lang == Lang.HI) Locale("hi", "IN") else Locale.ENGLISH)
+/** Dates use English month and day names in both English and Hinglish. */
+@Suppress("UNUSED_PARAMETER")
+fun dateFormatter(lang: Lang, pattern: String): DateTimeFormatter = DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +95,7 @@ fun SetupScreen(onDone: () -> Unit) {
 
     fun defaultSubjects(): List<String> {
         val e = Exams.byKey(examKey)
-        return if (lang == Lang.HI) e.subjectsHi else e.subjectsEn
+        return e.subjects
     }
 
     fun currentSubjects(): List<String> = if (subjectsTouched) subjects else defaultSubjects()
@@ -141,7 +142,7 @@ fun SetupScreen(onDone: () -> Unit) {
                 }
             }
             Segmented(
-                listOf(Lang.EN to "English", Lang.HI to "हिंदी"), lang,
+                listOf(Lang.EN to "English", Lang.HI to "Hinglish"), lang,
                 { l -> prefs.lang = l },
                 Modifier.width(180.dp),
             )
@@ -151,16 +152,16 @@ fun SetupScreen(onDone: () -> Unit) {
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Utho · उठो", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text("Utho", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             when (step) {
                 1 -> {
                     Text(
-                        tr("Which exam are you preparing for?", "आप किस परीक्षा की तैयारी कर रहे हैं?"),
+                        tr("Which exam are you preparing for?", "Aap kis exam ki taiyari kar rahe hain?"),
                         style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
                     )
                     OutlinedTextField(
                         value = name, onValueChange = { name = it },
-                        label = { Text(tr("Your name", "आपका नाम")) }, singleLine = true,
+                        label = { Text(tr("Your name", "Aapka naam")) }, singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("nameField"),
                     )
                     val exams = Exams.all
@@ -168,7 +169,7 @@ fun SetupScreen(onDone: () -> Unit) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             row.forEach { e ->
                                 OptionTile(
-                                    text = if (lang == Lang.HI) e.hi else e.en,
+                                    text = e.name,
                                     selected = e.key == examKey,
                                     onClick = { examKey = e.key },
                                     modifier = Modifier.weight(1f),
@@ -178,18 +179,18 @@ fun SetupScreen(onDone: () -> Unit) {
                             if (row.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
-                    Text(tr("Exam date (optional)", "परीक्षा की तारीख (ज़रूरी नहीं)"), fontWeight = FontWeight.SemiBold)
+                    Text(tr("Exam date (optional)", "Exam ki date (zaroori nahi)"), fontWeight = FontWeight.SemiBold)
                     SecondButton(
-                        if (examDate >= 0) LocalDate.ofEpochDay(examDate).format(dateFormatter(lang, "d MMMM yyyy")) else tr("Pick a date", "तारीख चुनें"),
+                        if (examDate >= 0) LocalDate.ofEpochDay(examDate).format(dateFormatter(lang, "d MMMM yyyy")) else tr("Pick a date", "Date chunein"),
                         { showDate = true },
                     )
                 }
                 2 -> {
-                    Text(tr("Your subjects", "आपके विषय"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(tr("Your subjects", "Aapke subjects"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Muted(
                         tr(
                             "When you say what you studied, the app files it under one of these.",
-                            "आप जो पढ़ाई बताएंगे, ऐप उसे इनमें से किसी विषय में रखेगा।",
+                            "Aap jo padhai bataenge, app use inmein se kisi subject mein rakhega.",
                         ),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -201,7 +202,7 @@ fun SetupScreen(onDone: () -> Unit) {
                                     subjectsTouched = true
                                 },
                                 label = { Text(s, fontSize = 15.sp) },
-                                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = tr("Remove", "हटाएं"), Modifier.size(18.dp)) },
+                                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = tr("Remove", "Hatayein"), Modifier.size(18.dp)) },
                                 modifier = Modifier.heightIn(min = 40.dp),
                             )
                         }
@@ -209,7 +210,7 @@ fun SetupScreen(onDone: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = newSubject, onValueChange = { newSubject = it },
-                            label = { Text(tr("Add a subject", "विषय जोड़ें")) }, singleLine = true,
+                            label = { Text(tr("Add a subject", "Subject jodein")) }, singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = {
@@ -218,34 +219,34 @@ fun SetupScreen(onDone: () -> Unit) {
                                 subjectsTouched = true
                                 newSubject = ""
                             }
-                        }) { Icon(Icons.Filled.Add, contentDescription = tr("Add", "जोड़ें")) }
+                        }) { Icon(Icons.Filled.Add, contentDescription = tr("Add", "Jodein")) }
                     }
-                    Text(tr("Daily study goal", "रोज़ का पढ़ाई लक्ष्य"), fontWeight = FontWeight.SemiBold)
-                    Stepper("$goalHours " + tr("hours", "घंटे"), { goalHours = (goalHours - 1).coerceAtLeast(1) }, { goalHours = (goalHours + 1).coerceAtMost(16) })
+                    Text(tr("Daily study goal", "Roz ka padhai target"), fontWeight = FontWeight.SemiBold)
+                    Stepper("$goalHours " + tr("hours", "ghante"), { goalHours = (goalHours - 1).coerceAtLeast(1) }, { goalHours = (goalHours + 1).coerceAtMost(16) })
                 }
                 3 -> {
-                    Text(tr("Morning alarm", "सुबह का अलार्म"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(tr("Morning alarm", "Subah ka alarm"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Muted(
                         tr(
                             "It keeps ringing until the camera counts your exercise. You can change this any time.",
-                            "जब तक कैमरा आपकी एक्सरसाइज़ नहीं गिनता, अलार्म बजता रहेगा। इसे कभी भी बदल सकते हैं।",
+                            "Jab tak camera aapki exercise nahi ginta, alarm bajta rahega. Ise kabhi bhi badal sakte hain.",
                         ),
                     )
                     CardBox {
-                        ToggleRow(tr("Turn on wake-up alarm", "अलार्म चालू करें"), null, alarmOn) { alarmOn = it }
+                        ToggleRow(tr("Turn on wake-up alarm", "Alarm on karein"), null, alarmOn) { alarmOn = it }
                         if (alarmOn) {
                             Divider()
-                            NavRow(tr("Time", "समय"), clockText(hour, minute), { showTime = true })
+                            NavRow(tr("Time", "Time"), clockText(hour, minute), { showTime = true })
                         }
                     }
                     if (alarmOn) {
-                        Text(tr("To stop it, do", "बंद करने के लिए करें"), fontWeight = FontWeight.SemiBold)
+                        Text(tr("To stop it, do", "Band karne ke liye karein"), fontWeight = FontWeight.SemiBold)
                         ExerciseGrid(exercise) { exercise = it }
                     }
                     Muted(
                         tr(
                             "Next, Android will ask for camera (counts reps), microphone (voice journal) and notifications (alarm). Everything stays on this phone.",
-                            "अब Android कैमरा (गिनती), माइक (आवाज़ से डायरी) और नोटिफिकेशन (अलार्म) की अनुमति मांगेगा। सब कुछ इसी फोन पर रहता है।",
+                            "Ab Android camera (ginti), mic (voice journal) aur notification (alarm) ki permission maangega. Sab kuch isi phone par rehta hai.",
                         ),
                     )
                 }
@@ -254,9 +255,9 @@ fun SetupScreen(onDone: () -> Unit) {
         }
 
         Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (step > 1) SecondButton(tr("Back", "पीछे"), { step-- }, Modifier.weight(1f))
+            if (step > 1) SecondButton(tr("Back", "Peeche"), { step-- }, Modifier.weight(1f))
             BigButton(
-                if (step < 3) tr("Continue", "आगे") else tr("Finish", "शुरू करें"),
+                if (step < 3) tr("Continue", "Aage") else tr("Finish", "Shuru karein"),
                 { if (step < 3) step++ else requestThenFinish() },
                 Modifier.weight(1f),
             )
@@ -273,9 +274,9 @@ fun SetupScreen(onDone: () -> Unit) {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { examDate = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay() }
                     showDate = false
-                }) { Text(tr("OK", "ठीक है")) }
+                }) { Text(tr("OK", "OK")) }
             },
-            dismissButton = { TextButton(onClick = { showDate = false }) { Text(tr("Cancel", "रद्द करें")) } },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text(tr("Cancel", "Cancel")) } },
         ) { DatePicker(state = state) }
     }
     if (showTime) {
@@ -302,10 +303,10 @@ fun Stepper(value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
 
 @Composable
 fun exerciseLabel(e: Exercise): String = when (e) {
-    Exercise.PUSHUP -> tr("Push-ups", "पुश-अप")
-    Exercise.SQUAT -> tr("Squats", "स्क्वैट")
-    Exercise.JUMPING_JACK -> tr("Jumping jacks", "जंपिंग जैक")
-    Exercise.PLANK -> tr("Plank", "प्लैंक")
+    Exercise.PUSHUP -> tr("Push-ups", "Push-ups")
+    Exercise.SQUAT -> tr("Squats", "Squats")
+    Exercise.JUMPING_JACK -> tr("Jumping jacks", "Jumping jacks")
+    Exercise.PLANK -> tr("Plank", "Plank")
 }
 
 @Composable
@@ -316,7 +317,7 @@ fun ExerciseGrid(selected: Exercise, onPick: (Exercise) -> Unit) {
                 row.forEach { e ->
                     OptionTile(
                         text = exerciseLabel(e),
-                        sub = if (e.isHold) tr("Hold for a set time", "तय समय तक रुकें") else tr("Camera counts reps", "कैमरा गिनता है"),
+                        sub = if (e.isHold) tr("Hold for a set time", "Set time tak ruke rahein") else tr("Camera counts reps", "Camera ginta hai"),
                         selected = e == selected,
                         onClick = { onPick(e) },
                         modifier = Modifier.weight(1f),

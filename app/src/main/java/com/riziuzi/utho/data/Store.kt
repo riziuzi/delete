@@ -21,6 +21,7 @@ class Store private constructor(context: Context) {
     private val workoutsList = mutableListOf<WorkoutRecord>()
     private val notesMap = mutableMapOf<String, DayNote>()
     private val examplesMap = mutableMapOf<String, MutableList<String>>()
+    private val freeNotesList = mutableListOf<CheckIn>()
 
     init {
         load()
@@ -29,6 +30,17 @@ class Store private constructor(context: Context) {
     val sessions: List<StudySession> get() = synchronized(lock) { sessionsList.toList() }
     val workouts: List<WorkoutRecord> get() = synchronized(lock) { workoutsList.toList() }
     val examples: Map<String, List<String>> get() = synchronized(lock) { examplesMap.mapValues { it.value.toList() } }
+
+    /** Voice notes spoken outside a study session (from the home screen or the journal). */
+    val freeNotes: List<CheckIn> get() = synchronized(lock) { freeNotesList.toList() }
+
+    fun addFreeNote(c: CheckIn) = change { freeNotesList += c }
+
+    /** A mood heard in a voice note becomes the day's mood (the latest one wins). */
+    fun setDayMood(date: LocalDate, mood: Int) = change {
+        val k = date.toString()
+        notesMap[k] = (notesMap[k] ?: DayNote()).copy(mood = mood)
+    }
 
     fun activeSession(): StudySession? = synchronized(lock) { sessionsList.lastOrNull { it.active } }
 
@@ -92,6 +104,7 @@ class Store private constructor(context: Context) {
         workoutsList.clear()
         notesMap.clear()
         examplesMap.clear()
+        freeNotesList.clear()
     }
 
     fun exportJson(): String = synchronized(lock) { toJson().toString(2) }
@@ -117,17 +130,7 @@ class Store private constructor(context: Context) {
                     put("start", s.startMs)
                     put("end", s.endMs ?: JSONObject.NULL)
                     put("subject", s.subject)
-                    put("checkIns", JSONArray().apply {
-                        s.checkIns.forEach { c ->
-                            put(JSONObject().apply {
-                                put("t", c.timeMs)
-                                put("text", c.text)
-                                put("topic", c.topic ?: JSONObject.NULL)
-                                put("kind", c.kind.name)
-                                put("corrected", c.corrected)
-                            })
-                        }
-                    })
+                    put("checkIns", JSONArray().apply { s.checkIns.forEach { put(checkInJson(it)) } })
                 })
             }
         })
@@ -152,8 +155,27 @@ class Store private constructor(context: Context) {
             }
         })
         o.put("examples", JSONObject().apply { examplesMap.forEach { (k, v) -> put(k, JSONArray(v)) } })
+        o.put("freeNotes", JSONArray().apply { freeNotesList.forEach { put(checkInJson(it)) } })
         return o
     }
+
+    private fun checkInJson(c: CheckIn) = JSONObject().apply {
+        put("t", c.timeMs)
+        put("text", c.text)
+        put("topic", c.topic ?: JSONObject.NULL)
+        put("kind", c.kind.name)
+        put("corrected", c.corrected)
+        put("mood", c.mood ?: JSONObject.NULL)
+    }
+
+    private fun checkInFrom(c: JSONObject) = CheckIn(
+        timeMs = c.getLong("t"),
+        text = c.optString("text", ""),
+        topic = if (c.isNull("topic")) null else c.getString("topic"),
+        kind = runCatching { CheckInKind.valueOf(c.optString("kind", "SPOKEN")) }.getOrDefault(CheckInKind.SPOKEN),
+        corrected = c.optBoolean("corrected", false),
+        mood = if (!c.has("mood") || c.isNull("mood")) null else c.getInt("mood"),
+    )
 
     private fun load() {
         if (!file.exists()) return
@@ -163,16 +185,7 @@ class Store private constructor(context: Context) {
                 for (i in 0 until a.length()) {
                     val s = a.getJSONObject(i)
                     val cs = s.optJSONArray("checkIns") ?: JSONArray()
-                    val checkIns = (0 until cs.length()).map { j ->
-                        val c = cs.getJSONObject(j)
-                        CheckIn(
-                            timeMs = c.getLong("t"),
-                            text = c.optString("text", ""),
-                            topic = if (c.isNull("topic")) null else c.getString("topic"),
-                            kind = runCatching { CheckInKind.valueOf(c.optString("kind", "SPOKEN")) }.getOrDefault(CheckInKind.SPOKEN),
-                            corrected = c.optBoolean("corrected", false),
-                        )
-                    }
+                    val checkIns = (0 until cs.length()).map { j -> checkInFrom(cs.getJSONObject(j)) }
                     sessionsList += StudySession(
                         id = s.getLong("id"),
                         startMs = s.getLong("start"),
@@ -195,6 +208,7 @@ class Store private constructor(context: Context) {
                     notesMap[k] = DayNote(if (x.isNull("mood")) null else x.getInt("mood"), x.optString("note", ""))
                 }
             }
+            o.optJSONArray("freeNotes")?.let { a -> for (i in 0 until a.length()) freeNotesList += checkInFrom(a.getJSONObject(i)) }
             o.optJSONObject("examples")?.let { e ->
                 for (k in e.keys()) {
                     val a = e.getJSONArray(k)

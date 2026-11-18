@@ -28,8 +28,8 @@ class AlarmReceiver : BroadcastReceiver() {
             AlarmScheduler.ACTION_AWAKE_CHECK -> {
                 val n = Notifications.fullScreen(
                     ctx, Notifications.ID_AWAKE, Notifications.CH_ALARM,
-                    lang.t("Still awake?", "जाग रहे हैं?"),
-                    lang.t("Tap to confirm, or the alarm rings again", "टैप करें, वरना अलार्म फिर बजेगा"),
+                    lang.t("Still awake?", "Jaag rahe ho?"),
+                    lang.t("Tap to confirm, or the alarm rings again", "Tap karein, warna alarm phir bajega"),
                     Intent(ctx, AwakeCheckActivity::class.java), NotificationCompat.CATEGORY_ALARM,
                 )
                 Notifications.post(ctx, Notifications.ID_AWAKE, n)
@@ -50,8 +50,8 @@ class AlarmReceiver : BroadcastReceiver() {
                     Notifications.cancel(ctx, Notifications.ID_SESSION)
                     Notifications.simple(
                         ctx, Notifications.ID_STUDY,
-                        lang.t("Study session stopped", "पढ़ाई सेशन रोका गया"),
-                        lang.t("No answer to the last 3 check-ins, so it was saved until your last one.", "पिछले 3 चेक-इन का जवाब नहीं मिला, इसलिए आखिरी चेक-इन तक सेव किया।"),
+                        lang.t("Study session stopped", "Padhai session rok diya"),
+                        lang.t("No answer to the last 3 check-ins, so it was saved until your last one.", "Pichhle 3 check-in ka jawaab nahi mila, isliye aakhri check-in tak save kiya."),
                         Intent(ctx, MainActivity::class.java),
                     )
                     return
@@ -59,8 +59,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 AlarmScheduler.scheduleNextCheckIn(ctx)
                 val n = Notifications.fullScreen(
                     ctx, Notifications.ID_CHECKIN, Notifications.CH_CHECKIN,
-                    lang.t("Quick check-in", "छोटा चेक-इन"),
-                    lang.t("Say what you studied in the last ${prefs.checkInMin} min", "बताइए पिछले ${prefs.checkInMin} मिनट में क्या पढ़ा"),
+                    lang.t("Quick check-in", "Quick check-in"),
+                    lang.t("Say what you studied in the last ${prefs.checkInMin} min", "Bataiye pichhle ${prefs.checkInMin} minute mein kya padha aur mood kaisa hai"),
                     Intent(ctx, CheckInActivity::class.java), NotificationCompat.CATEGORY_REMINDER,
                 )
                 Notifications.post(ctx, Notifications.ID_CHECKIN, n)
@@ -72,8 +72,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (Store.get(ctx).activeSession() == null && studied == 0 && prefs.setupDone) {
                     Notifications.simple(
                         ctx, Notifications.ID_STUDY,
-                        lang.t("Time to study", "पढ़ाई का समय"),
-                        lang.t("Tap to start today's first session", "आज का पहला सेशन शुरू करें"),
+                        lang.t("Time to study", "Padhai ka time"),
+                        lang.t("Tap to start today's first session", "Aaj ka pehla session shuru karein"),
                         Intent(ctx, MainActivity::class.java),
                     )
                 }
@@ -84,8 +84,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (Store.get(ctx).note(today).mood == null && prefs.setupDone) {
                     Notifications.simple(
                         ctx, Notifications.ID_JOURNAL,
-                        lang.t("Your journal is ready", "आपकी डायरी तैयार है"),
-                        lang.t("Add how today went in one tap", "एक टैप में बताइए आज कैसा रहा"),
+                        lang.t("Your journal is ready", "Aapka journal taiyaar hai"),
+                        lang.t("Add how today went in one tap", "Ek tap mein bataiye aaj kaisa raha"),
                         Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_JOURNAL),
                     )
                 }

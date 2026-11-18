@@ -118,8 +118,8 @@ class ScreenTour {
             runCatching { it.performClick() }.onFailure { tag("day-${java.time.LocalDate.now().dayOfMonth}").performClick() }
         }
         shot("13-journal-en")
-        click("हिं")
-        shot("14-journal-hi-text")
+        click("Hinglish")
+        shot("14-journal-hinglish")
         click("Good")
         shot("15-journal-mood")
         back()
@@ -134,25 +134,20 @@ class ScreenTour {
         shot("17-profile")
         tag("openSettings").performClick()
         shot("18-settings-top")
+        rule.onNodeWithText("Offline voice").performScrollTo()
+        shot("19-settings-voice")
         tag("deleteAll").performScrollTo()
-        shot("19-settings-bottom")
-        rule.onNodeWithText("Voice test").performScrollTo().performClick()
-        shot("20-voice-test")
-        tag("voiceTestButton").performClick()
-        shot("21-voice-test-listening", 3000)
-        tag("voiceTestButton").performClick()
-        shot("22-voice-test-result", 3500)
-        back()
+        shot("20-settings-bottom")
 
-        // ---- Hindi app
+        // ---- Hinglish app
         rule.onNodeWithTag("langSetting").performScrollTo()
-        click("हिंदी")
-        shot("23-settings-hindi")
+        click("Hinglish")
+        shot("23-settings-hinglish")
         back()
         back()
-        shot("24-today-hindi")
+        shot("24-today-hinglish")
         tag("tab-progress").performClick()
-        shot("25-progress-hindi")
+        shot("25-progress-hinglish")
         tag("tab-today").performClick()
         Prefs(ctx).lang = Lang.EN
         rule.waitForIdle()
@@ -165,16 +160,39 @@ class ScreenTour {
         shot("27-workout-plank", 4000)
         back()
 
-        // ---- voice check-in (session is still running)
-        startActivity(Intent(ctx, CheckInActivity::class.java))
+        // ---- voice check-in from the Speak button (session is still running)
+        val store = com.riziuzi.utho.data.Store.get(ctx)
+        tag("speakNote").performScrollTo().performClick()
         shot("28-checkin-listening", 2500)
-        Thread.sleep(16_000)
-        shot("29-checkin-review", 1500)
-        // Tap a subject: saves the check-in under it.
+        tag("checkInDone").performClick()
+        shot("29-checkin-review", 300)
+        // Nothing was heard on the emulator: fix the subject and mood by hand, then save.
         rule.onNodeWithText("History", useUnmergedTree = true).performClick()
-        Thread.sleep(1000)
-        val last = com.riziuzi.utho.data.Store.get(ctx).activeSession()!!.checkIns.last()
-        org.junit.Assert.assertEquals("History", last.topic)
+        rule.onNodeWithText("Good", useUnmergedTree = true).performClick()
+        shot("29b-checkin-fixed", 300)
+        tag("checkInSave").performClick()
+        Thread.sleep(800)
+        store.activeSession()!!.checkIns.last().let {
+            org.junit.Assert.assertEquals("History", it.topic)
+            org.junit.Assert.assertEquals(1, it.mood)
+        }
+
+        // ---- the timed pop-up when nobody answers: waits 15 s, says "not selected / not said", closes by itself
+        val before = store.activeSession()!!.checkIns.size
+        startActivity(Intent(ctx, CheckInActivity::class.java))
+        Thread.sleep(16_000)
+        shot("29c-checkin-no-answer", 200)
+        val deadline = System.currentTimeMillis() + 25_000
+        while (store.activeSession()!!.checkIns.size == before && System.currentTimeMillis() < deadline) {
+            rule.waitForIdle()
+            Thread.sleep(500)
+        }
+        store.activeSession()!!.checkIns.let {
+            org.junit.Assert.assertEquals(before + 1, it.size)
+            org.junit.Assert.assertNull(it.last().topic)
+            org.junit.Assert.assertNull(it.last().mood)
+            org.junit.Assert.assertEquals("", it.last().text)
+        }
 
         // ---- still awake?
         startActivity(Intent(ctx, AwakeCheckActivity::class.java))
@@ -193,11 +211,19 @@ class ScreenTour {
         store.clearAll()
         beginStudy(ctx, "Polity")
         val s = store.activeSession()!!
-        store.addCheckIn(s.id, com.riziuzi.utho.core.CheckIn(s.startMs + 1, "मुगल साम्राज्य पढ़ा", "History"))
+        store.addCheckIn(s.id, com.riziuzi.utho.core.CheckIn(s.startMs + 1, "Mughal samrajya padha", "History"))
         endStudy(ctx)
         val ended = store.sessions.last()
         org.junit.Assert.assertFalse(ended.active)
         org.junit.Assert.assertEquals("History", ended.checkIns.single().topic)
+
+        // A note spoken outside a session still lands in today's journal, with its mood.
+        val today = java.time.LocalDate.now(com.riziuzi.utho.data.Summaries.zone)
+        store.addFreeNote(com.riziuzi.utho.core.CheckIn(System.currentTimeMillis(), "Polity revision ki, mood accha hai", "Polity", mood = 1))
+        store.setDayMood(today, 1)
+        val day = com.riziuzi.utho.data.Summaries.day(ctx, today)
+        org.junit.Assert.assertTrue(day.checkIns.any { it.text.startsWith("Polity revision") })
+        org.junit.Assert.assertEquals(1, store.note(today).mood)
         store.clearAll()
     }
 }

@@ -15,7 +15,10 @@ object Punctuator {
         "what", "why", "how", "when", "where", "who", "whom", "whose", "which",
         "is", "are", "am", "was", "were", "do", "does", "did", "can", "could", "should", "would",
         "will", "shall", "may", "might", "have", "has",
+        // Hinglish
+        "kya", "kyon", "kyu", "kyun", "kaise", "kab", "kahan", "kaha", "kaun", "kitna", "kitne", "kitni", "kisne", "kisko",
     )
+    private val hinglishQuestionEnds = setOf("kya", "na")
     private val enders = setOf('.', '?', '!', '।')
 
     fun devanagariShare(s: String): Float {
@@ -49,7 +52,7 @@ object Punctuator {
         val question = if (hindi) {
             first in hindiQuestionStarts || last in hindiQuestionEnds
         } else {
-            first in englishQuestionStarts
+            first in englishQuestionStarts || last in hinglishQuestionEnds
         }
         val end = when {
             question -> "?"

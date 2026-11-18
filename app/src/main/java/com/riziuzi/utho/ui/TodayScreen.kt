@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material3.AlertDialog
@@ -130,7 +131,7 @@ fun TodayScreen(nav: Nav) {
             Column(Modifier.weight(1f)) {
                 Muted(today.format(dateFormatter(lang, "EEEE, d MMM")))
                 Text(
-                    if (name.isBlank()) tr("Hi there", "नमस्ते") else tr("Hi, $name", "नमस्ते, $name"),
+                    if (name.isBlank()) tr("Hi there", "Namaste") else tr("Hi, $name", "Namaste, $name"),
                     style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
                 )
             }
@@ -139,8 +140,8 @@ fun TodayScreen(nav: Nav) {
 
         if (remember(tick) { prefs.alarmEnabled } && needsFullScreenPermission(ctx)) {
             CardBox(color = MaterialTheme.colorScheme.secondaryContainer, onClick = { openFullScreenSettings(ctx) }) {
-                Text(tr("Allow the alarm screen over the lock screen", "लॉक स्क्रीन पर अलार्म दिखाने की अनुमति दें"), fontWeight = FontWeight.SemiBold)
-                Muted(tr("Tap, then turn on full-screen notifications for Utho.", "टैप करें और Utho के लिए फुल-स्क्रीन नोटिफिकेशन चालू करें।"))
+                Text(tr("Allow the alarm screen over the lock screen", "Lock screen par alarm dikhane ki permission dein"), fontWeight = FontWeight.SemiBold)
+                Muted(tr("Tap, then turn on full-screen notifications for Utho.", "Tap karein aur Utho ke liye full-screen notification on karein."))
             }
         }
 
@@ -152,11 +153,11 @@ fun TodayScreen(nav: Nav) {
             CardBox {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Muted(if (lang == Lang.HI) exam.hi else exam.en)
+                        Muted(exam.name)
                         Text(date.format(dateFormatter(lang, "d MMM yyyy")), fontWeight = FontWeight.SemiBold)
                     }
                     Text("${left.coerceAtLeast(0)}", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Muted(" " + tr("days left", "दिन बाकी"))
+                    Muted(" " + tr("days left", "din baaki"))
                 }
             }
         }
@@ -177,15 +178,15 @@ fun TodayScreen(nav: Nav) {
             }
             Column {
                 if (active != null) {
-                    Text(tr("Studying", "पढ़ाई चल रही है") + " · " + active.subject, color = MaterialTheme.colorScheme.onPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(tr("Studying", "Padhai chal rahi hai") + " · " + active.subject, color = MaterialTheme.colorScheme.onPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text(formatElapsed(now - active.startMs), color = MaterialTheme.colorScheme.onPrimary, fontSize = 14.sp)
                 } else {
-                    Text(tr("Start studying", "पढ़ाई शुरू करें"), color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(tr("Start studying", "Padhai shuru karein"), color = MaterialTheme.colorScheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     val left = (goal - summary.studyMinutes).coerceAtLeast(0)
                     Text(
-                        if (left == 0) tr("Today's goal is done", "आज का लक्ष्य पूरा") else tr(
+                        if (left == 0) tr("Today's goal is done", "Aaj ka target poora") else tr(
                             "${JournalWriter.duration(left, Lang.EN)} left of today's ${JournalWriter.duration(goal, Lang.EN)}",
-                            "आज के ${JournalWriter.duration(goal, Lang.HI)} में से ${JournalWriter.duration(left, Lang.HI)} बाकी",
+                            "Aaj ke ${JournalWriter.duration(goal, Lang.HI)} mein se ${JournalWriter.duration(left, Lang.HI)} baaki",
                         ),
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f), fontSize = 13.sp,
                     )
@@ -193,20 +194,33 @@ fun TodayScreen(nav: Nav) {
             }
         }
 
-        SectionLabel(tr("Today", "आज"))
+        CardBox(onClick = { ctx.startActivity(CheckInActivity.manualIntent(ctx)) }, modifier = Modifier.testTag("speakNote")) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                Column(Modifier.weight(1f)) {
+                    Text(tr("Speak", "Bolein"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Muted(tr("What you studied and how you feel", "Kya padha aur mood kaisa hai"))
+                }
+            }
+        }
+
+        SectionLabel(tr("Today", "Aaj"))
         CardBox {
             val workout = summary.workouts.firstOrNull { it.completed }
             TodayRow(
                 done = workout != null,
                 partial = false,
-                title = tr("Morning workout", "सुबह की एक्सरसाइज़"),
+                title = tr("Morning workout", "Subah ki exercise"),
                 sub = if (workout != null) {
-                    if (workout.exercise.isHold) tr("${workout.done}-second plank", "${workout.done} सेकंड का प्लैंक")
+                    if (workout.exercise.isHold) tr("${workout.done}-second plank", "${workout.done} second ka plank")
                     else "${workout.done} ${JournalWriter.exerciseName(workout.exercise, lang)} · ${JournalWriter.seconds(workout.durationSec, lang)}"
                 } else {
-                    tr("Not done yet", "अभी नहीं हुई")
+                    tr("Not done yet", "Abhi nahi hui")
                 },
-                action = if (workout == null) tr("Workout now", "अभी करें") else null,
+                action = if (workout == null) tr("Workout now", "Abhi karein") else null,
                 onAction = {
                     ctx.startActivity(WorkoutActivity.workoutIntent(ctx, prefs.exercise, prefs.alarmTarget, prefs.level, record = true))
                 },
@@ -215,8 +229,8 @@ fun TodayScreen(nav: Nav) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     StatusDot(done = summary.studyMinutes >= goal, partial = summary.studyMinutes > 0)
-                    Text(tr("Study", "पढ़ाई"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Muted(tr("${JournalWriter.duration(summary.studyMinutes, lang)} of ${JournalWriter.duration(goal, lang)}", "${JournalWriter.duration(goal, lang)} में से ${JournalWriter.duration(summary.studyMinutes, lang)}"))
+                    Text(tr("Study", "Padhai"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Muted(tr("${JournalWriter.duration(summary.studyMinutes, lang)} of ${JournalWriter.duration(goal, lang)}", "${JournalWriter.duration(goal, lang)} mein se ${JournalWriter.duration(summary.studyMinutes, lang)}"))
                 }
                 Bar(if (goal > 0) summary.studyMinutes / goal.toFloat() else 0f)
             }
@@ -225,8 +239,8 @@ fun TodayScreen(nav: Nav) {
             TodayRow(
                 done = note.mood != null,
                 partial = false,
-                title = tr("Journal", "डायरी"),
-                sub = if (note.mood != null) tr("Mood added", "मूड जोड़ा गया") else tr("Writes itself. You add your mood.", "अपने आप लिखी जाती है। आप बस मूड जोड़ें।"),
+                title = tr("Journal", "Journal"),
+                sub = if (note.mood != null) tr("Mood added", "Mood add ho gaya") else tr("Writes itself. You add your mood.", "Apne aap likha jaata hai. Aap bas mood batayein."),
                 action = null,
                 onAction = {},
                 modifier = Modifier.clickable { nav.go(Route.Journal(today.toEpochDay())) }.testTag("journalRow"),
@@ -268,8 +282,8 @@ private fun AlarmCard(nav: Nav) {
                     val date = Summaries.dateOf(next)
                     val today = LocalDate.now(Summaries.zone)
                     val day = when (date) {
-                        today -> tr("Today", "आज")
-                        today.plusDays(1) -> tr("Tomorrow", "कल")
+                        today -> tr("Today", "Aaj")
+                        today.plusDays(1) -> tr("Tomorrow", "Kal")
                         else -> date.format(dateFormatter(lang, "EEEE"))
                     }
                     val t = Instant.ofEpochMilli(next).atZone(Summaries.zone)
@@ -277,12 +291,12 @@ private fun AlarmCard(nav: Nav) {
                     val target = remember(tick) { prefs.alarmTarget }
                     val ex = remember(tick) { prefs.exercise }
                     Muted(
-                        if (ex.isHold) tr("Stops after a $target-second plank", "$target सेकंड के प्लैंक के बाद बंद होगा")
-                        else tr("Stops after $target ${JournalWriter.exerciseName(ex, Lang.EN)}", "$target ${JournalWriter.exerciseName(ex, Lang.HI)} के बाद बंद होगा"),
+                        if (ex.isHold) tr("Stops after a $target-second plank", "$target second ke plank ke baad band hoga")
+                        else tr("Stops after $target ${JournalWriter.exerciseName(ex, Lang.EN)}", "$target ${JournalWriter.exerciseName(ex, Lang.HI)} ke baad band hoga"),
                     )
                 } else {
-                    Text(tr("Set a wake-up alarm", "सुबह का अलार्म लगाएं"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Muted(tr("It stops only after your exercise", "एक्सरसाइज़ के बाद ही बंद होगा"))
+                    Text(tr("Set a wake-up alarm", "Subah ka alarm lagayein"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Muted(tr("It stops only after your exercise", "Exercise ke baad hi band hoga"))
                 }
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -329,10 +343,10 @@ private fun TodayRow(
 fun SubjectDialog(subjects: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tr("What are you starting with?", "किससे शुरू कर रहे हैं?")) },
+        title = { Text(tr("What are you starting with?", "Kis subject se shuru kar rahe hain?")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Muted(tr("The voice check-ins will update this as you go.", "चेक-इन के दौरान यह अपने आप बदलता रहेगा।"))
+                Muted(tr("The voice check-ins will update this as you go.", "Check-in ke dauraan yeh apne aap badalta rahega."))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     subjects.ifEmpty { listOf("General") }.forEach { s ->
                         OptionTile(s, false, { onPick(s) }, minHeight = 44.dp)
@@ -341,6 +355,6 @@ fun SubjectDialog(subjects: List<String>, onDismiss: () -> Unit, onPick: (String
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "रद्द करें")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "Cancel")) } },
     )
 }

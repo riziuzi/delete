@@ -29,13 +29,15 @@ class TopicClassifier(
         val names = (listOf(norm) + lex.flatMap { it.aliases }.map { normalize(it) }).filter { it.isNotBlank() }.distinct()
         val keywords = lex.flatMap { it.keywords }.map { normalize(it) }.filter { it.isNotBlank() }.distinct()
         val ex = (examples[topic] ?: emptyList()).map { trigrams(normalize(it)) }
-        Prepared(topic, names, keywords, ex)
+        Prepared(topic, names, names.map { soundKeys(it) }, keywords, keywords.map { soundKeys(it) }, ex)
     }
 
     private class Prepared(
         val topic: String,
         val names: List<String>,
+        val nameKeys: List<List<String>>,
         val keywords: List<String>,
+        val keywordKeys: List<List<String>>,
         val examples: List<Map<String, Int>>,
     )
 
@@ -45,10 +47,12 @@ class TopicClassifier(
         val tokens = norm.split(" ")
         val padded = " $norm "
         val grams = trigrams(norm)
+        // Sound-alike keys catch English words written in Hindi script (मैथ्स = maths).
+        val textKeys = tokens.map { if (it in STOP_TOKENS || !Phonetic.hasDevanagari(it)) "" else Phonetic.key(it) }
 
         val ranked = prepared.map { p ->
-            val nameHits = p.names.count { matches(it, tokens, padded) }
-            val keywordHits = p.keywords.count { matches(it, tokens, padded) }
+            val nameHits = p.names.indices.count { matches(p.names[it], tokens, padded) || Phonetic.contains(textKeys, p.nameKeys[it], 3) }
+            val keywordHits = p.keywords.indices.count { matches(p.keywords[it], tokens, padded) || Phonetic.contains(textKeys, p.keywordKeys[it], 4) }
             val sim = p.examples.maxOfOrNull { cosine(grams, it) } ?: 0.0
             val exampleScore = if (sim >= 0.3) 5.0 * sim else 0.0
             Scored(p.topic, 3.0 * min(nameHits, 2) + min(keywordHits, 5) + exampleScore)
@@ -62,6 +66,20 @@ class TopicClassifier(
     }
 
     companion object {
+        /** Romanised Hindi words in the lexicon: matched by spelling only, never by sound (ganit ~ घंटे). */
+        private val ROMAN_HINDI = setOf(
+            "rajvyavastha", "samvidhan", "sansad", "anuched", "adhikar", "itihas", "angrez", "andolan", "bhugol", "nadi", "parvat",
+            "mehngai", "arthvyavastha", "arthashastra", "ganit", "nibandh", "naitikta", "vigyan", "paryavaran", "angrezi", "vyakaran",
+            "bhautiki", "rasayan", "sawal",
+        )
+
+        /** Sound keys for English terms only; Hindi terms are matched by spelling. */
+        private fun soundKeys(term: String): List<String> =
+            if (Phonetic.hasDevanagari(term) || term in ROMAN_HINDI) emptyList() else Phonetic.keys(term)
+
+        /** Everyday words that sound like a subject name ("सेंस" ~ science). */
+        private val STOP_TOKENS = setOf("सेंस", "sense", "स्त्री", "पलट", "पलटा", "ऐसे", "ऐसा", "स्टार", "star")
+
         fun normalize(s: String): String = s.lowercase()
             .replace('ँ', 'ं')
             .replace("़", "") // nukta: ज़ -> ज, ढ़ -> ढ
@@ -107,7 +125,7 @@ class TopicClassifier(
                 aliases = listOf("polity", "राजव्यवस्था", "राजनीति", "rajvyavastha", "constitution", "gs2", "governance", "शासन"),
                 keywords = listOf(
                     "constitution", "संविधान", "samvidhan", "parliament", "संसद", "sansad", "article", "अनुच्छेद", "anuched",
-                    "fundamental", "मौलिक", "rights", "अधिकार", "adhikar", "president", "राष्ट्रपति", "governor", "राज्यपाल",
+                    "fundamental", "मौलिक", "rights", "राइट्स", "अधिकार", "adhikar", "president", "राष्ट्रपति", "governor", "राज्यपाल",
                     "judiciary", "न्यायपालिका", "supreme court", "सुप्रीम", "high court", "उच्च न्यायालय", "lok sabha", "लोकसभा",
                     "rajya sabha", "राज्यसभा", "amendment", "संशोधन", "preamble", "प्रस्तावना", "panchayat", "पंचायत",
                     "federalism", "संघवाद", "election", "चुनाव", "निर्वाचन", "laxmikanth", "लक्ष्मीकांत", "dpsp", "नीति निदेशक",
@@ -157,7 +175,7 @@ class TopicClassifier(
                 ),
             ),
             Lexicon(
-                aliases = listOf("essay", "निबंध", "nibandh"),
+                aliases = listOf("essay", "निबंध", "nibandh", "एस्से"),
                 keywords = listOf("essay", "निबंध", "nibandh", "introduction", "conclusion", "quote", "उद्धरण", "भूमिका", "निष्कर्ष"),
             ),
             Lexicon(
@@ -191,7 +209,7 @@ class TopicClassifier(
                 ),
             ),
             Lexicon(
-                aliases = listOf("csat", "reasoning", "रीजनिंग", "तर्कशक्ति", "logical reasoning", "mental ability"),
+                aliases = listOf("csat", "सीसैट", "सी सैट", "सीसेट", "reasoning", "रीजनिंग", "तर्कशक्ति", "logical reasoning", "mental ability"),
                 keywords = listOf(
                     "reasoning", "तर्क", "comprehension", "puzzle", "पहेली", "syllogism", "blood relation", "रक्त संबंध",
                     "series", "श्रृंखला", "coding decoding", "direction", "दिशा", "seating arrangement", "data interpretation",
@@ -206,7 +224,7 @@ class TopicClassifier(
                 keywords = listOf("व्याकरण", "vyakaran", "संधि", "समास", "मुहावरे", "कविता", "कहानी", "पर्यायवाची", "विलोम"),
             ),
             Lexicon(
-                aliases = listOf("physics", "भौतिकी", "bhautiki"),
+                aliases = listOf("physics", "भौतिकी", "bhautiki", "फिजिक्स"),
                 keywords = listOf(
                     "force", "बल", "motion", "गति", "newton", "न्यूटन", "electric", "विद्युत", "magnet", "चुंबक", "optics",
                     "प्रकाशिकी", "wave", "तरंग", "thermodynamics", "ऊष्मागतिकी", "momentum", "संवेग", "energy", "ऊर्जा",
@@ -229,7 +247,7 @@ class TopicClassifier(
                 ),
             ),
             Lexicon(
-                aliases = listOf("general awareness", "general knowledge", "gk", "सामान्य ज्ञान", "static gk", "state gk", "banking awareness"),
+                aliases = listOf("general awareness", "general knowledge", "gk", "जीके", "जी के", "सामान्य ज्ञान", "static gk", "state gk", "banking awareness"),
                 keywords = listOf(
                     "capital", "राजधानी", "award", "पुरस्कार", "sports", "खेल", "author", "लेखक", "headquarters", "मुख्यालय",
                     "static gk", "first in india", "दिवस", "important days",
@@ -245,7 +263,7 @@ class TopicClassifier(
             ),
             Lexicon(
                 aliases = listOf("revision", "रिवीजन", "दोहराव"),
-                keywords = listOf("revision", "revise", "रिवीजन", "दोहराया", "दोहराव", "short notes"),
+                keywords = listOf("revision", "revise", "रिवीजन", "रिविजन", "दोहराया", "दोहराव", "short notes"),
             ),
             Lexicon(
                 aliases = listOf("practice", "mock test", "test series", "अभ्यास", "टेस्ट"),

@@ -31,8 +31,8 @@ class AlarmService : Service() {
         val ring = WorkoutActivity.alarmIntent(this)
         val n = Notifications.fullScreen(
             this, Notifications.ID_ALARM, Notifications.CH_ALARM,
-            lang.t("Wake up!", "उठो!"),
-            lang.t("Do your exercise to stop the alarm", "अलार्म बंद करने के लिए एक्सरसाइज़ करें"),
+            lang.t("Wake up!", "Utho!"),
+            lang.t("Do your exercise to stop the alarm", "Alarm band karne ke liye exercise karein"),
             ring, NotificationCompat.CATEGORY_ALARM, ongoing = true,
         )
         ServiceCompat.startForeground(this, Notifications.ID_ALARM, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)

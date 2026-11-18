@@ -139,12 +139,25 @@ class JournalTest {
         assertEquals("9:30 AM · Polity: Read about Article 21 cases.", p[5])
     }
 
-    @Test fun hindi() {
+    @Test fun hinglish() {
         val p = JournalWriter.write(summary(), IST, Lang.HI)
-        assertEquals("सुबह 6:04 बजे उठे और 1 मिनट 52 सेकंड में 40 पुश-अप किए।", p[0])
-        assertEquals("कुल 5 घंटे 10 मिनट पढ़ाई की: Polity 3 घंटे, CSAT 2 घंटे 10 मिनट।", p[1])
-        assertEquals("सबसे लंबा फोकस 1 घंटा 40 मिनट रहा।", p[2])
-        assertEquals("लक्ष्य 6 घंटे का था, 50 मिनट कम रहे।", p[3])
+        assertEquals("Subah 6:04 baje uthe aur 1 minute 52 second mein 40 push-ups kiye.", p[0])
+        assertEquals("Kul 5 ghante 10 minute padhai ki: Polity 3 ghante, CSAT 2 ghante 10 minute.", p[1])
+        assertEquals("Sabse lamba focus 1 ghanta 40 minute raha.", p[2])
+        assertEquals("Target 6 ghante ka tha, 50 minute kam rahe.", p[3])
+    }
+
+    @Test fun checkInsAnsweredAndMood() {
+        val d = summary().copy(
+            checkIns = listOf(CheckIn(at(day, 9, 30), "Article 21 padha", "Polity", mood = 1)),
+            checkInsAsked = 4, checkInsAnswered = 3,
+        )
+        val en = JournalWriter.write(d, IST, Lang.EN)
+        assertTrue(en.contains("Answered 3 of 4 check-ins."))
+        assertTrue(en.contains("9:30 AM · Polity · Good: Article 21 padha"))
+        val hi = JournalWriter.write(d, IST, Lang.HI)
+        assertTrue(hi.contains("4 mein se 3 check-in ka jawaab diya."))
+        assertTrue(hi.contains("subah 9:30 · Polity · Accha: Article 21 padha"))
     }
 
     @Test fun emptyDay() {
@@ -165,6 +178,6 @@ class JournalTest {
     @Test fun weekSummary() {
         val w = WeekSummary(31 * 60, 5, 6, "Polity" to 9 * 60)
         assertEquals("This week: 31 h studied on 5 days, 6 workouts. Most time on Polity (9 h).", JournalWriter.week(w, Lang.EN))
-        assertEquals("इस हफ्ते: 5 दिनों में 31 घंटे पढ़ाई, 6 वर्कआउट। सबसे ज़्यादा समय Polity को (9 घंटे)।", JournalWriter.week(w, Lang.HI))
+        assertEquals("Is hafte: 5 dinon mein 31 ghante padhai, 6 workout. Sabse zyada time Polity ko (9 ghante).", JournalWriter.week(w, Lang.HI))
     }
 }

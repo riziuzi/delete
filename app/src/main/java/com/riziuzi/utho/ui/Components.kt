@@ -76,7 +76,7 @@ fun ScreenScaffold(
         ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "वापस"))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Back"))
                 }
             } else {
                 Spacer(Modifier.width(12.dp))
@@ -271,8 +271,8 @@ fun TimeDialog(hour: Int, minute: Int, onDismiss: () -> Unit, onPick: (Int, Int)
     val state = rememberTimePickerState(hour, minute, DateFormat.is24HourFormat(ctx))
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { onPick(state.hour, state.minute) }) { Text(tr("OK", "ठीक है")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "रद्द करें")) } },
+        confirmButton = { TextButton(onClick = { onPick(state.hour, state.minute) }) { Text(tr("OK", "OK")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel", "Cancel")) } },
         text = { TimePicker(state = state) },
     )
 }

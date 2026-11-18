@@ -90,31 +90,31 @@ fun ProgressScreen(nav: Nav) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(tr("Progress", "प्रगति"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(tr("Progress", "Progress"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Segmented(
-                listOf(false to tr("Week", "हफ्ता"), true to tr("Month", "महीना")), monthView, { monthView = it },
+                listOf(false to tr("Week", "Hafta"), true to tr("Month", "Mahina")), monthView, { monthView = it },
                 Modifier.width(180.dp),
             )
         }
 
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Tile(tr("${week.activeDays} of 7", "7 में ${week.activeDays}"), tr("days this week", "दिन इस हफ्ते"), Modifier.weight(1f).fillMaxHeight())
-            Tile(JournalWriter.duration(week.studyMinutes, lang), tr("studied this week", "पढ़ाई इस हफ्ते"), Modifier.weight(1f).fillMaxHeight())
-            Tile(tr("$streak days", "$streak दिन"), tr("current run", "लगातार"), Modifier.weight(1f).fillMaxHeight())
+            Tile(tr("${week.activeDays} of 7", "${week.activeDays} / 7"), tr("days this week", "din is hafte"), Modifier.weight(1f).fillMaxHeight())
+            Tile(JournalWriter.duration(week.studyMinutes, lang), tr("studied this week", "padhai is hafte"), Modifier.weight(1f).fillMaxHeight())
+            Tile(tr("$streak days", "$streak din"), tr("current run", "lagatar"), Modifier.weight(1f).fillMaxHeight())
         }
 
         if (monthView) {
             CardBox {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { month = month.minusMonths(1) }) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = tr("Previous month", "पिछला महीना"))
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = tr("Previous month", "Pichhla mahina"))
                     }
                     Text(
                         month.atDay(1).format(dateFormatter(lang, "MMMM yyyy")),
                         fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
                     )
                     IconButton(onClick = { month = month.plusMonths(1) }, enabled = month.isBefore(YearMonth.from(today))) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = tr("Next month", "अगला महीना"))
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = tr("Next month", "Agla mahina"))
                     }
                 }
                 MonthGrid(month, today, perDay, workoutDays) { d -> nav.go(Route.Journal(d.toEpochDay())) }
@@ -123,26 +123,26 @@ fun ProgressScreen(nav: Nav) {
                     levelColorsLight.forEachIndexed { i, c ->
                         Box(Modifier.size(14.dp).clip(RoundedCornerShape(4.dp)).background(if (i == 0) MaterialTheme.colorScheme.surface else c).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)))
                     }
-                    Muted(tr("6 h+", "6 घंटे+"))
+                    Muted(tr("6 h+", "6 ghante+"))
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant))
-                    Muted(tr("workout", "एक्सरसाइज़"))
+                    Muted(tr("workout", "workout"))
                 }
-                Muted(tr("Tap a day to open its journal", "डायरी देखने के लिए दिन पर टैप करें"))
+                Muted(tr("Tap a day to open its journal", "Journal dekhne ke liye din par tap karein"))
             }
         } else {
             CardBox {
-                Text(tr("This week", "यह हफ्ता"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(tr("This week", "Yeh hafta"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 WeekBars(weekStart, today, perDay, workoutDays) { d -> nav.go(Route.Journal(d.toEpochDay())) }
             }
         }
 
         CardBox {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("This week by subject", "इस हफ्ते विषय के हिसाब से"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                Muted(tr("$restLeft rest days left", "$restLeft आराम दिन बाकी"))
+                Text(tr("This week by subject", "Is hafte subject ke hisaab se"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Muted(tr("$restLeft rest days left", "$restLeft rest days baaki"))
             }
-            if (byTopic.isEmpty()) Muted(tr("Start a study session to see this.", "यह देखने के लिए पढ़ाई शुरू करें।"))
+            if (byTopic.isEmpty()) Muted(tr("Start a study session to see this.", "Yeh dekhne ke liye padhai shuru karein."))
             val max = byTopic.maxOfOrNull { it.second } ?: 1
             byTopic.take(8).forEach { (t, m) ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -157,10 +157,10 @@ fun ProgressScreen(nav: Nav) {
             Text(JournalWriter.week(week, lang), fontSize = 15.sp)
             if (best != null) {
                 Text(
-                    if (exercise.isHold) tr("Longest plank: $best s", "सबसे लंबा प्लैंक: $best सेकंड")
+                    if (exercise.isHold) tr("Longest plank: $best s", "Sabse lamba plank: $best second")
                     else tr(
                         "Best $target ${JournalWriter.exerciseName(exercise, Lang.EN)}: ${JournalWriter.seconds(best, Lang.EN)}",
-                        "$target ${JournalWriter.exerciseName(exercise, Lang.HI)} का सबसे अच्छा समय: ${JournalWriter.seconds(best, Lang.HI)}",
+                        "$target ${JournalWriter.exerciseName(exercise, Lang.HI)} ka best time: ${JournalWriter.seconds(best, Lang.HI)}",
                     ),
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 )
@@ -185,7 +185,7 @@ private fun MonthGrid(month: YearMonth, today: LocalDate, perDay: Map<LocalDate,
     val cells: List<LocalDate?> = List(blanks) { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(tr("M", "सो"), tr("T", "मं"), tr("W", "बु"), tr("T", "गु"), tr("F", "शु"), tr("S", "श"), tr("S", "र")).forEach {
+            listOf(tr("M", "M"), tr("T", "T"), tr("W", "W"), tr("T", "T"), tr("F", "F"), tr("S", "S"), tr("S", "S")).forEach {
                 Text(it, fontSize = 12.sp, color = cs.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }

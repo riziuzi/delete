@@ -14,6 +14,9 @@ data class DaySummary(
     val sessionCount: Int,
     val goalMinutes: Int,
     val checkIns: List<CheckIn>,
+    /** Voice check-ins that popped up during study sessions, and how many got an answer. */
+    val checkInsAsked: Int = 0,
+    val checkInsAnswered: Int = 0,
 )
 
 data class WeekSummary(
@@ -23,7 +26,7 @@ data class WeekSummary(
     val topTopic: Pair<String, Int>?,
 )
 
-/** Writes the automatic journal from recorded data, in English or Hindi. No AI or internet needed. */
+/** Writes the automatic journal from recorded data, in English or Hinglish. No AI or internet needed. */
 object JournalWriter {
 
     fun exerciseName(e: Exercise, lang: Lang, plural: Boolean = true): String = when (lang) {
@@ -34,10 +37,10 @@ object JournalWriter {
             Exercise.PLANK -> "plank"
         }
         Lang.HI -> when (e) {
-            Exercise.PUSHUP -> "पुश-अप"
-            Exercise.SQUAT -> "स्क्वैट"
-            Exercise.JUMPING_JACK -> "जंपिंग जैक"
-            Exercise.PLANK -> "प्लैंक"
+            Exercise.PUSHUP -> "push-ups"
+            Exercise.SQUAT -> "squats"
+            Exercise.JUMPING_JACK -> "jumping jacks"
+            Exercise.PLANK -> "plank"
         }
     }
 
@@ -51,31 +54,31 @@ object JournalWriter {
                 else -> "$h h $m min"
             }
             Lang.HI -> {
-                val hs = if (h == 1) "1 घंटा" else "$h घंटे"
+                val hs = if (h == 1) "1 ghanta" else "$h ghante"
                 when {
-                    h == 0 -> "$m मिनट"
+                    h == 0 -> "$m minute"
                     m == 0 -> hs
-                    else -> "$hs $m मिनट"
+                    else -> "$hs $m minute"
                 }
             }
         }
     }
 
-    /** m:ss in English, "1 मिनट 52 सेकंड" in Hindi. */
+    /** m:ss in English, "1 minute 52 second" in Hinglish. */
     fun seconds(totalSec: Int, lang: Lang): String {
         val m = totalSec / 60
         val s = totalSec % 60
         return when (lang) {
             Lang.EN -> "$m:" + s.toString().padStart(2, '0')
             Lang.HI -> when {
-                m == 0 -> "$s सेकंड"
-                s == 0 -> "$m मिनट"
-                else -> "$m मिनट $s सेकंड"
+                m == 0 -> "$s second"
+                s == 0 -> "$m minute"
+                else -> "$m minute $s second"
             }
         }
     }
 
-    /** "6:04 AM" / "सुबह 6:04". */
+    /** "6:04 AM" / "subah 6:04". */
     fun clock(ms: Long, zone: ZoneId, lang: Lang): String {
         val t = Instant.ofEpochMilli(ms).atZone(zone).toLocalTime()
         val h12 = if (t.hour % 12 == 0) 12 else t.hour % 12
@@ -84,10 +87,10 @@ object JournalWriter {
             Lang.EN -> "$hm " + if (t.hour < 12) "AM" else "PM"
             Lang.HI -> {
                 val period = when (t.hour) {
-                    in 4..11 -> "सुबह"
-                    in 12..15 -> "दोपहर"
-                    in 16..19 -> "शाम"
-                    else -> "रात"
+                    in 4..11 -> "subah"
+                    in 12..15 -> "dopahar"
+                    in 16..19 -> "shaam"
+                    else -> "raat"
                 }
                 "$period $hm"
             }
@@ -96,7 +99,7 @@ object JournalWriter {
 
     private fun workoutPhrase(w: WorkoutRecord, lang: Lang): String = when (lang) {
         Lang.EN -> if (w.exercise.isHold) "held a ${w.done}-second plank" else "did ${w.done} ${exerciseName(w.exercise, lang, w.done != 1)}"
-        Lang.HI -> if (w.exercise.isHold) "${w.done} सेकंड का प्लैंक किया" else "${w.done} ${exerciseName(w.exercise, lang)} किए"
+        Lang.HI -> if (w.exercise.isHold) "${w.done} second ka plank kiya" else "${w.done} ${exerciseName(w.exercise, lang)} kiye"
     }
 
     private fun topicList(byTopic: List<Pair<String, Int>>, lang: Lang): String =
@@ -117,9 +120,9 @@ object JournalWriter {
                     "Woke up at $time and did ${alarm.done} ${exerciseName(alarm.exercise, lang, alarm.done != 1)} in ${seconds(alarm.durationSec, lang)}."
                 }
                 Lang.HI -> if (alarm.exercise.isHold) {
-                    "$time बजे उठे और ${alarm.done} सेकंड का प्लैंक किया।"
+                    cap("$time baje uthe aur ${alarm.done} second ka plank kiya.")
                 } else {
-                    "$time बजे उठे और ${seconds(alarm.durationSec, lang)} में ${alarm.done} ${exerciseName(alarm.exercise, lang)} किए।"
+                    cap("$time baje uthe aur ${seconds(alarm.durationSec, lang)} mein ${alarm.done} ${exerciseName(alarm.exercise, lang)} kiye.")
                 }
             }
         }
@@ -127,7 +130,7 @@ object JournalWriter {
             val list = others.joinToString(", ") { workoutPhrase(it, lang) }
             out += when (lang) {
                 Lang.EN -> "Workout: ${list.replaceFirstChar { it.uppercaseChar() }}."
-                Lang.HI -> "वर्कआउट: $list।"
+                Lang.HI -> "Workout: $list."
             }
         }
 
@@ -136,12 +139,12 @@ object JournalWriter {
             val list = topicList(d.byTopic, lang)
             out += when (lang) {
                 Lang.EN -> if (list.isEmpty()) "Studied $total in total." else "Studied $total in total: $list."
-                Lang.HI -> if (list.isEmpty()) "कुल $total पढ़ाई की।" else "कुल $total पढ़ाई की: $list।"
+                Lang.HI -> if (list.isEmpty()) "Kul $total padhai ki." else "Kul $total padhai ki: $list."
             }
             if (d.sessionCount > 1 && d.longestBlockMin > 0) {
                 out += when (lang) {
                     Lang.EN -> "Longest focus block: ${duration(d.longestBlockMin, lang)}."
-                    Lang.HI -> "सबसे लंबा फोकस ${duration(d.longestBlockMin, lang)} रहा।"
+                    Lang.HI -> "Sabse lamba focus ${duration(d.longestBlockMin, lang)} raha."
                 }
             }
         }
@@ -151,14 +154,21 @@ object JournalWriter {
             out += if (d.studyMinutes >= d.goalMinutes) {
                 when (lang) {
                     Lang.EN -> "Daily goal of $goal reached."
-                    Lang.HI -> "$goal का लक्ष्य पूरा हुआ।"
+                    Lang.HI -> "$goal ka target poora hua."
                 }
             } else {
                 val short = duration(d.goalMinutes - d.studyMinutes, lang)
                 when (lang) {
                     Lang.EN -> "Goal was $goal, $short short."
-                    Lang.HI -> "लक्ष्य $goal का था, $short कम रहे।"
+                    Lang.HI -> "Target $goal ka tha, $short kam rahe."
                 }
+            }
+        }
+
+        if (d.checkInsAsked > 0) {
+            out += when (lang) {
+                Lang.EN -> "Answered ${d.checkInsAnswered} of ${d.checkInsAsked} check-ins."
+                Lang.HI -> "${d.checkInsAsked} mein se ${d.checkInsAnswered} check-in ka jawaab diya."
             }
         }
 
@@ -166,34 +176,37 @@ object JournalWriter {
         if (notes.isNotEmpty()) {
             out += when (lang) {
                 Lang.EN -> "Study notes:"
-                Lang.HI -> "पढ़ाई के नोट्स:"
+                Lang.HI -> "Padhai ke notes:"
             }
             for (c in notes) {
                 val topic = c.topic?.let { " · $it" } ?: ""
-                out += "${clock(c.timeMs, zone, lang)}$topic: ${c.text}"
+                val mood = c.mood?.let { " · ${Moods.label(it, lang)}" } ?: ""
+                out += "${clock(c.timeMs, zone, lang)}$topic$mood: ${c.text}"
             }
         }
 
         if (out.isEmpty()) {
             out += when (lang) {
                 Lang.EN -> "Nothing recorded for this day yet."
-                Lang.HI -> "इस दिन अभी कुछ दर्ज नहीं हुआ।"
+                Lang.HI -> "Is din abhi kuch record nahi hua."
             }
         }
         return out
     }
+
+    private fun cap(s: String) = s.replaceFirstChar { it.uppercaseChar() }
 
     fun week(w: WeekSummary, lang: Lang): String {
         val hours = duration(w.studyMinutes, lang)
         val base = when (lang) {
             Lang.EN -> "This week: $hours studied on ${w.activeDays} ${if (w.activeDays == 1) "day" else "days"}, " +
                 "${w.workouts} ${if (w.workouts == 1) "workout" else "workouts"}."
-            Lang.HI -> "इस हफ्ते: ${w.activeDays} दिनों में $hours पढ़ाई, ${w.workouts} वर्कआउट।"
+            Lang.HI -> "Is hafte: ${w.activeDays} dinon mein $hours padhai, ${w.workouts} workout."
         }
         val top = w.topTopic ?: return base
         return base + " " + when (lang) {
             Lang.EN -> "Most time on ${top.first} (${duration(top.second, lang)})."
-            Lang.HI -> "सबसे ज़्यादा समय ${top.first} को (${duration(top.second, lang)})।"
+            Lang.HI -> "Sabse zyada time ${top.first} ko (${duration(top.second, lang)})."
         }
     }
 }

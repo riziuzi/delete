@@ -29,18 +29,18 @@ object Notifications {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         val lang = Prefs(ctx).lang
         nm.createNotificationChannel(
-            NotificationChannel(CH_ALARM, lang.t("Wake-up alarm", "सुबह का अलार्म"), NotificationManager.IMPORTANCE_HIGH).apply {
+            NotificationChannel(CH_ALARM, lang.t("Wake-up alarm", "Subah ka alarm"), NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null) // the alarm sound is played by AlarmService
             },
         )
         nm.createNotificationChannel(
-            NotificationChannel(CH_CHECKIN, lang.t("Study check-ins", "पढ़ाई चेक-इन"), NotificationManager.IMPORTANCE_HIGH),
+            NotificationChannel(CH_CHECKIN, lang.t("Study check-ins", "Padhai check-in"), NotificationManager.IMPORTANCE_HIGH),
         )
         nm.createNotificationChannel(
-            NotificationChannel(CH_REMIND, lang.t("Reminders", "रिमाइंडर"), NotificationManager.IMPORTANCE_DEFAULT),
+            NotificationChannel(CH_REMIND, lang.t("Reminders", "Reminders"), NotificationManager.IMPORTANCE_DEFAULT),
         )
         nm.createNotificationChannel(
-            NotificationChannel(CH_SESSION, lang.t("Study timer", "पढ़ाई टाइमर"), NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CH_SESSION, lang.t("Study timer", "Padhai timer"), NotificationManager.IMPORTANCE_LOW),
         )
     }
 
@@ -91,7 +91,7 @@ object Notifications {
         val open = Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_STUDY)
         val n = NotificationCompat.Builder(ctx, CH_SESSION)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-            .setContentTitle(lang.t("Studying", "पढ़ाई चल रही है") + " · " + s.subject)
+            .setContentTitle(lang.t("Studying", "Padhai chal rahi hai") + " · " + s.subject)
             .setWhen(s.startMs)
             .setUsesChronometer(true)
             .setShowWhen(true)

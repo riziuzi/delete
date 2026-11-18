@@ -147,49 +147,21 @@ class Prefs(context: Context) {
     fun clearAll() = edit { clear() }
 }
 
-/** Exams shown at setup, with starting subjects in English and Hindi. */
+/** Exams shown at setup, with their starting subjects. */
 object Exams {
-    data class Exam(val key: String, val en: String, val hi: String, val subjectsEn: List<String>, val subjectsHi: List<String>)
+    data class Exam(val key: String, val name: String, val subjects: List<String>)
 
     val all = listOf(
-        Exam(
-            "UPSC", "UPSC CSE", "UPSC CSE",
-            listOf("Polity", "History", "Geography", "Economy", "Environment", "Science & Tech", "Ethics", "Essay", "CSAT", "Current affairs"),
-            listOf("राजव्यवस्था", "इतिहास", "भूगोल", "अर्थव्यवस्था", "पर्यावरण", "विज्ञान और तकनीक", "नीतिशास्त्र", "निबंध", "CSAT", "करेंट अफेयर्स"),
-        ),
-        Exam(
-            "PSC", "State PSC", "राज्य PSC",
-            listOf("Polity", "History", "Geography", "Economy", "State GK", "Current affairs", "CSAT"),
-            listOf("राजव्यवस्था", "इतिहास", "भूगोल", "अर्थव्यवस्था", "राज्य सामान्य ज्ञान", "करेंट अफेयर्स", "CSAT"),
-        ),
-        Exam(
-            "SSC", "SSC (CGL, CHSL)", "SSC (CGL, CHSL)",
-            listOf("Maths", "Reasoning", "English", "General awareness"),
-            listOf("गणित", "रीजनिंग", "अंग्रेजी", "सामान्य ज्ञान"),
-        ),
-        Exam(
-            "BANK", "Banking (IBPS, SBI)", "बैंकिंग (IBPS, SBI)",
-            listOf("Quant", "Reasoning", "English", "Banking awareness", "Current affairs"),
-            listOf("गणित", "रीजनिंग", "अंग्रेजी", "बैंकिंग जागरूकता", "करेंट अफेयर्स"),
-        ),
-        Exam(
-            "RRB", "Railways (RRB)", "रेलवे (RRB)",
-            listOf("Maths", "Reasoning", "General science", "General awareness"),
-            listOf("गणित", "रीजनिंग", "सामान्य विज्ञान", "सामान्य ज्ञान"),
-        ),
-        Exam(
-            "DEF", "Defence (NDA, CDS)", "रक्षा (NDA, CDS)",
-            listOf("Maths", "English", "General knowledge"),
-            listOf("गणित", "अंग्रेजी", "सामान्य ज्ञान"),
-        ),
-        Exam("NEET", "NEET", "NEET", listOf("Physics", "Chemistry", "Biology"), listOf("भौतिकी", "रसायन", "जीवविज्ञान")),
-        Exam("JEE", "JEE", "JEE", listOf("Physics", "Chemistry", "Maths"), listOf("भौतिकी", "रसायन", "गणित")),
-        Exam(
-            "TET", "Teaching (CTET, TET)", "शिक्षक (CTET, TET)",
-            listOf("Child development", "Maths", "EVS", "Language"),
-            listOf("बाल विकास", "गणित", "पर्यावरण अध्ययन", "भाषा"),
-        ),
-        Exam("OTHER", "Other", "अन्य", listOf("Reading", "Practice", "Revision"), listOf("पढ़ाई", "अभ्यास", "रिवीजन")),
+        Exam("UPSC", "UPSC CSE", listOf("Polity", "History", "Geography", "Economy", "Environment", "Science & Tech", "Ethics", "Essay", "CSAT", "Current affairs")),
+        Exam("PSC", "State PSC", listOf("Polity", "History", "Geography", "Economy", "State GK", "Current affairs", "CSAT")),
+        Exam("SSC", "SSC (CGL, CHSL)", listOf("Maths", "Reasoning", "English", "General awareness")),
+        Exam("BANK", "Banking (IBPS, SBI)", listOf("Quant", "Reasoning", "English", "Banking awareness", "Current affairs")),
+        Exam("RRB", "Railways (RRB)", listOf("Maths", "Reasoning", "General science", "General awareness")),
+        Exam("DEF", "Defence (NDA, CDS)", listOf("Maths", "English", "General knowledge")),
+        Exam("NEET", "NEET", listOf("Physics", "Chemistry", "Biology")),
+        Exam("JEE", "JEE", listOf("Physics", "Chemistry", "Maths")),
+        Exam("TET", "Teaching (CTET, TET)", listOf("Child development", "Maths", "EVS", "Language")),
+        Exam("OTHER", "Other", listOf("Reading", "Practice", "Revision")),
     )
 
     fun byKey(key: String) = all.firstOrNull { it.key == key } ?: all.first()

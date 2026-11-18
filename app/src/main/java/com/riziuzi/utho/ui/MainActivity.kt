@@ -45,7 +45,6 @@ sealed interface Route {
     data class Journal(val epochDay: Long) : Route
     data object Profile : Route
     data object Settings : Route
-    data object VoiceTest : Route
 }
 
 enum class Tab { TODAY, PROGRESS, GROUP }
@@ -127,7 +126,6 @@ fun AppRoot(open: MutableState<String?>) {
                 is Route.Journal -> JournalScreen(nav, LocalDate.ofEpochDay(r.epochDay))
                 Route.Profile -> ProfileScreen(nav)
                 Route.Settings -> SettingsScreen(nav)
-                Route.VoiceTest -> VoiceTestScreen(nav)
             }
         }
     }
@@ -142,17 +140,17 @@ fun HomeScreen(nav: Nav, tab: Tab) {
                 NavigationBarItem(
                     selected = tab == Tab.TODAY, onClick = { nav.setTab(Tab.TODAY) },
                     icon = { Icon(Icons.Outlined.WbSunny, contentDescription = null) },
-                    label = { Text(tr("Today", "आज")) }, modifier = Modifier.testTag("tab-today"),
+                    label = { Text(tr("Today", "Aaj")) }, modifier = Modifier.testTag("tab-today"),
                 )
                 NavigationBarItem(
                     selected = tab == Tab.PROGRESS, onClick = { nav.setTab(Tab.PROGRESS) },
                     icon = { Icon(Icons.Outlined.BarChart, contentDescription = null) },
-                    label = { Text(tr("Progress", "प्रगति")) }, modifier = Modifier.testTag("tab-progress"),
+                    label = { Text(tr("Progress", "Progress")) }, modifier = Modifier.testTag("tab-progress"),
                 )
                 NavigationBarItem(
                     selected = tab == Tab.GROUP, onClick = { nav.setTab(Tab.GROUP) },
                     icon = { Icon(Icons.Outlined.Groups, contentDescription = null) },
-                    label = { Text(tr("Group", "ग्रुप")) }, modifier = Modifier.testTag("tab-group"),
+                    label = { Text(tr("Group", "Group")) }, modifier = Modifier.testTag("tab-group"),
                 )
             }
         },

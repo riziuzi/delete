@@ -154,18 +154,18 @@ class WorkoutActivity : ComponentActivity() {
 
 @Composable
 fun hintText(h: Hint): String = when (h) {
-    Hint.NOT_VISIBLE -> tr("Can't see you. Step back so your whole body is in view", "आप दिख नहीं रहे। पीछे हटें ताकि पूरा शरीर दिखे")
-    Hint.GET_IN_POSITION -> tr("Get into position", "पोज़िशन में आएं")
-    Hint.STRAIGHTEN_ARMS -> tr("Straighten your arms to start", "शुरू करने के लिए हाथ सीधे करें")
-    Hint.GO_DOWN -> tr("Go down", "नीचे जाएं")
-    Hint.PUSH_UP -> tr("Push up!", "ऊपर आएं!")
-    Hint.STAND_TALL -> tr("Stand straight, facing the phone", "फोन की ओर सीधे खड़े हों")
-    Hint.SQUAT_DOWN -> tr("Squat down", "नीचे बैठें")
-    Hint.STAND_UP -> tr("Stand up!", "खड़े हों!")
-    Hint.OPEN_UP -> tr("Jump out, arms up", "कूदें, हाथ ऊपर")
-    Hint.CLOSE_IN -> tr("Jump back in", "वापस आएं")
-    Hint.HOLD -> tr("Hold it!", "रुके रहें!")
-    Hint.STRAIGHTEN_BODY -> tr("Keep your body straight", "शरीर सीधा रखें")
+    Hint.NOT_VISIBLE -> tr("Can't see you. Step back so your whole body is in view", "Aap dikh nahi rahe. Peeche hatiye taaki poori body dikhe")
+    Hint.GET_IN_POSITION -> tr("Get into position", "Position mein aaiye")
+    Hint.STRAIGHTEN_ARMS -> tr("Straighten your arms to start", "Shuru karne ke liye haath seedhe karein")
+    Hint.GO_DOWN -> tr("Go down", "Neeche jaaiye")
+    Hint.PUSH_UP -> tr("Push up!", "Upar aaiye!")
+    Hint.STAND_TALL -> tr("Stand straight, facing the phone", "Phone ki taraf seedhe khade hoiye")
+    Hint.SQUAT_DOWN -> tr("Squat down", "Neeche baithiye")
+    Hint.STAND_UP -> tr("Stand up!", "Khade hoiye!")
+    Hint.OPEN_UP -> tr("Jump out, arms up", "Koodiye, haath upar")
+    Hint.CLOSE_IN -> tr("Jump back in", "Wapas aaiye")
+    Hint.HOLD -> tr("Hold it!", "Ruke rahiye!")
+    Hint.STRAIGHTEN_BODY -> tr("Keep your body straight", "Body seedhi rakhiye")
 }
 
 @Composable
@@ -238,8 +238,8 @@ private fun WorkoutScreen(
             )
             Text(
                 when {
-                    finished -> tr("Done! Great start.", "हो गया! बढ़िया शुरुआत।")
-                    !granted -> tr("Camera permission needed", "कैमरा अनुमति चाहिए")
+                    finished -> tr("Done! Great start.", "Ho gaya! Badhiya shuruaat.")
+                    !granted -> tr("Camera permission needed", "Camera permission chahiye")
                     else -> hintText(state.hint)
                 },
                 fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
@@ -254,7 +254,7 @@ private fun WorkoutScreen(
             Column(Modifier.weight(1f)) {
                 Column(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xCC17181C)).padding(horizontal = 10.dp, vertical = 6.dp)) {
                     Text(exerciseLabel(exercise) + " · " + levelLabel(level), color = Color.White, fontSize = 14.sp)
-                    Text(tr("Place the phone 1.5–2 m away", "फोन 1.5–2 मीटर दूर रखें"), color = Color(0xFFDADCE3), fontSize = 13.sp)
+                    Text(tr("Place the phone 1.5–2 m away", "Phone 1.5–2 meter door rakhiye"), color = Color(0xFFDADCE3), fontSize = 13.sp)
                 }
             }
             if (alarm) {
@@ -270,7 +270,7 @@ private fun WorkoutScreen(
                 TextButton(
                     onClick = onClose,
                     modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Color(0xCC17181C)),
-                ) { Text(tr("Close", "बंद करें"), color = Color.White, fontSize = 16.sp) }
+                ) { Text(tr("Close", "Band karein"), color = Color.White, fontSize = 16.sp) }
             }
         }
     }
@@ -278,9 +278,9 @@ private fun WorkoutScreen(
 
 @Composable
 private fun levelLabel(l: Level) = when (l) {
-    Level.EASY -> tr("Easy", "आसान")
-    Level.NORMAL -> tr("Normal", "सामान्य")
-    Level.STRICT -> tr("Strict", "सख्त")
+    Level.EASY -> tr("Easy", "Aasaan")
+    Level.NORMAL -> tr("Normal", "Normal")
+    Level.STRICT -> tr("Strict", "Sakht")
 }
 
 @Composable
@@ -334,15 +334,15 @@ private fun DepthBar(state: CounterState, exercise: Exercise, modifier: Modifier
         else -> Color(0xFF5B8DEF)
     }
     val top = when {
-        exercise.isHold -> if (state.reached) tr("HOLD", "रुकें") else tr("LINE", "सीधा")
+        exercise.isHold -> if (state.reached) tr("HOLD", "RUKO") else tr("LINE", "SEEDHA")
         state.reached -> when (exercise) {
-            Exercise.SQUAT -> tr("UP!", "उठें!")
-            Exercise.JUMPING_JACK -> tr("IN!", "अंदर!")
-            else -> tr("UP!", "ऊपर!")
+            Exercise.SQUAT -> tr("UP!", "UTHO!")
+            Exercise.JUMPING_JACK -> tr("IN!", "ANDAR!")
+            else -> tr("UP!", "UPAR!")
         }
         else -> when (exercise) {
-            Exercise.JUMPING_JACK -> tr("OPEN", "खोलें")
-            else -> tr("DOWN", "नीचे")
+            Exercise.JUMPING_JACK -> tr("OPEN", "KHOLO")
+            else -> tr("DOWN", "NEECHE")
         }
     }
     Column(
@@ -393,7 +393,7 @@ private fun HoldToStop(seconds: Int, onDone: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(tr("Emergency stop: hold ${seconds}s", "आपात स्टॉप: ${seconds}s दबाएं"), color = Color.White, fontSize = 13.sp)
+        Text(tr("Emergency stop: hold ${seconds}s", "Emergency stop: ${seconds}s dabaiye"), color = Color.White, fontSize = 13.sp)
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.width(170.dp))
     }
 }

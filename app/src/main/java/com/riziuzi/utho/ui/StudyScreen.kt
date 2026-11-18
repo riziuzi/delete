@@ -49,10 +49,10 @@ fun StudyScreen(nav: Nav) {
     var switchTopic by remember { mutableStateOf(false) }
     var fixing by remember { mutableStateOf<CheckIn?>(null) }
 
-    ScreenScaffold(title = tr("Study session", "पढ़ाई सेशन"), onBack = { nav.back() }) {
+    ScreenScaffold(title = tr("Study session", "Padhai session"), onBack = { nav.back() }) {
         if (session == null) {
-            Muted(tr("No session is running.", "अभी कोई सेशन नहीं चल रहा।"))
-            BigButton(tr("Start studying", "पढ़ाई शुरू करें"), { pickNew = true })
+            Muted(tr("No session is running.", "Abhi koi session nahi chal raha."))
+            BigButton(tr("Start studying", "Padhai shuru karein"), { pickNew = true })
             return@ScreenScaffold
         }
         val current = session.checkIns.lastOrNull()?.topic ?: session.subject
@@ -63,10 +63,10 @@ fun StudyScreen(nav: Nav) {
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Muted(tr("Now studying", "अभी पढ़ रहे हैं"))
+                    Muted(tr("Now studying", "Abhi padh rahe hain"))
                     Text(current, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 }
-                SmallTextButton(tr("Change", "बदलें")) { switchTopic = true }
+                SmallTextButton(tr("Change", "Badlein")) { switchTopic = true }
             }
         }
 
@@ -74,42 +74,42 @@ fun StudyScreen(nav: Nav) {
         val next = remember(tick) { prefs.nextCheckInMs }
         CardBox {
             if (interval > 0) {
-                Text(tr("Voice check-in every $interval min", "हर $interval मिनट पर आवाज़ से चेक-इन"), fontWeight = FontWeight.SemiBold)
+                Text(tr("Voice check-in every $interval min", "Har $interval minute par voice check-in"), fontWeight = FontWeight.SemiBold)
                 if (next > now) {
-                    Muted(tr("Next at ", "अगला ") + JournalWriter.clock(next, Summaries.zone, lang))
+                    Muted(tr("Next at ", "Agla ") + JournalWriter.clock(next, Summaries.zone, lang))
                 }
                 Muted(
                     tr(
                         "The screen wakes up and listens for 15 seconds. Just say what you studied.",
-                        "स्क्रीन जागेगी और 15 सेकंड सुनेगी। बस बताइए क्या पढ़ा।",
+                        "Screen jagegi aur 15 second sunegi. Bas bataiye kya padha.",
                     ),
                 )
             } else {
-                Text(tr("Voice check-ins are off", "आवाज़ चेक-इन बंद हैं"), fontWeight = FontWeight.SemiBold)
-                Muted(tr("Turn them on in Settings.", "सेटिंग्स में चालू करें।"))
+                Text(tr("Voice check-ins are off", "Voice check-ins off hain"), fontWeight = FontWeight.SemiBold)
+                Muted(tr("Turn them on in Settings.", "Settings mein on karein."))
             }
-            SecondButton(tr("Check in now", "अभी चेक-इन करें"), {
+            SecondButton(tr("Check in now", "Abhi check-in karein"), {
                 ctx.startActivity(Intent(ctx, CheckInActivity::class.java).putExtra(CheckInActivity.EXTRA_MANUAL, true))
             })
         }
 
         if (session.checkIns.any { it.kind == CheckInKind.SPOKEN }) {
-            SectionLabel(tr("Check-ins", "चेक-इन"))
+            SectionLabel(tr("Check-ins", "Check-ins"))
             CardBox {
                 session.checkIns.filter { it.kind == CheckInKind.SPOKEN }.sortedByDescending { it.timeMs }.forEachIndexed { i, c ->
                     if (i > 0) Divider()
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Muted(JournalWriter.clock(c.timeMs, Summaries.zone, lang), Modifier.weight(1f))
-                            OptionTile(c.topic ?: tr("Not sure", "पता नहीं"), selected = c.topic != null, onClick = { fixing = c }, minHeight = 36.dp)
+                            OptionTile(c.topic ?: tr("Not sure", "Pata nahi"), selected = c.topic != null, onClick = { fixing = c }, minHeight = 36.dp)
                         }
-                        Text(c.text.ifBlank { tr("(nothing said)", "(कुछ नहीं कहा)") }, style = MaterialTheme.typography.bodyLarge)
+                        Text(c.text.ifBlank { tr("(nothing said)", "(kuch nahi kaha)") }, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
         }
 
-        BigButton(tr("Stop studying", "पढ़ाई रोकें"), {
+        BigButton(tr("Stop studying", "Padhai rokein"), {
             endStudy(ctx)
             nav.back()
         }, Modifier.testTag("stopStudy"))
