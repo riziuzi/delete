@@ -68,7 +68,7 @@ fun AlarmScreen(nav: Nav) {
     ) {
         CardBox(onClick = { showTime = true }) {
             Text(clockText(hour, minute), fontSize = 52.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            Muted(tr("Tap to change", "बदलने के लिए टैप करें"), Modifier.fillMaxWidth())
+            Muted(tr("Tap to change", "बदलने के लिए टैप करें"), Modifier.fillMaxWidth(), TextAlign.Center)
         }
 
         val names = listOf(

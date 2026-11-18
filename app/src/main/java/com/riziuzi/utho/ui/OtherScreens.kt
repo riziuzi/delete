@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -149,13 +152,13 @@ fun ProfileScreen(nav: Nav) {
             SecondButton(tr("Edit", "बदलें"), { editName = true }, Modifier.size(width = 96.dp, height = 48.dp))
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile(JournalWriter.duration(totalMin, lang), tr("studied in total", "कुल पढ़ाई"), Modifier.weight(1f))
-            StatTile("$reps", tr("reps done", "रेप्स किए"), Modifier.weight(1f))
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile(JournalWriter.duration(totalMin, lang), tr("studied in total", "कुल पढ़ाई"), Modifier.weight(1f).fillMaxHeight())
+            StatTile("$reps", tr("reps done", "रेप्स किए"), Modifier.weight(1f).fillMaxHeight())
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile("$mornings", tr("mornings up on time", "समय पर उठे"), Modifier.weight(1f))
-            StatTile(tr("$streak days", "$streak दिन"), tr("current run", "लगातार"), Modifier.weight(1f))
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile("$mornings", tr("mornings up on time", "समय पर उठे"), Modifier.weight(1f).fillMaxHeight())
+            StatTile(tr("$streak days", "$streak दिन"), tr("current run", "लगातार"), Modifier.weight(1f).fillMaxHeight())
         }
 
         CardBox {
@@ -330,9 +333,10 @@ fun SettingsScreen(nav: Nav) {
             Divider()
             Text(tr("I speak in", "मैं बोलता/बोलती हूँ"), fontSize = 16.sp)
             Segmented(
-                listOf(VoiceLang.MIX to tr("Hindi + English", "हिंदी + अंग्रेज़ी"), VoiceLang.HINDI to tr("Hindi", "हिंदी"), VoiceLang.ENGLISH to tr("English", "अंग्रेज़ी")),
+                listOf(VoiceLang.MIX to tr("Both", "दोनों"), VoiceLang.HINDI to tr("Hindi", "हिंदी"), VoiceLang.ENGLISH to tr("English", "अंग्रेज़ी")),
                 voice, { prefs.voiceLang = it }, Modifier.fillMaxWidth(),
             )
+            Muted(tr("Both = Hindi and English mixed in one sentence.", "दोनों = एक ही वाक्य में हिंदी और अंग्रेज़ी।"))
             Divider()
             NavRow(tr("Voice test", "वॉइस टेस्ट"), null, { nav.go(Route.VoiceTest) })
         }
@@ -567,7 +571,7 @@ fun VoiceTestScreen(nav: Nav) {
                 Text(tr("With punctuation", "विराम चिह्न के साथ"), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(it.ifBlank { tr("(nothing heard)", "(कुछ नहीं सुना)") }, fontSize = 16.sp)
             }
-            if (ranking.isNotEmpty()) {
+            if (ranking.isNotEmpty() && !result.isNullOrBlank()) {
                 Text(tr("Topic guess", "विषय का अनुमान"), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 ranking.forEach { (t, s) -> Text("$t  ·  %.1f".format(s), fontSize = 14.sp) }
             }

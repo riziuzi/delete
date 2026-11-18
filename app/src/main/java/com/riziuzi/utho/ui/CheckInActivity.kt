@@ -230,6 +230,9 @@ private fun CheckInScreen(session: StudySession, interval: Int, beepVolume: Int,
                     }, minHeight = 44.dp)
                 }
             }
+            if (text.isBlank()) {
+                Muted(tr("This stretch stays under \"$previous\". Tap another subject to change it.", "यह समय \"$previous\" में ही रहेगा। बदलना हो तो दूसरा विषय चुनें।"), textAlign = TextAlign.Center)
+            }
             if (guessed == null && text.isNotBlank()) {
                 Muted(tr("Not sure, so it kept \"$previous\". Tap the right one.", "पक्का नहीं, इसलिए \"$previous\" रखा। सही विषय चुनें।"))
             }

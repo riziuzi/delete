@@ -170,7 +170,11 @@ class ScreenTour {
         shot("28-checkin-listening", 2500)
         Thread.sleep(16_000)
         shot("29-checkin-review", 1500)
-        Thread.sleep(9_000)
+        // Tap a subject: saves the check-in under it.
+        rule.onNodeWithText("History", useUnmergedTree = true).performClick()
+        Thread.sleep(1000)
+        val last = com.riziuzi.utho.data.Store.get(ctx).activeSession()!!.checkIns.last()
+        org.junit.Assert.assertEquals("History", last.topic)
 
         // ---- still awake?
         startActivity(Intent(ctx, AwakeCheckActivity::class.java))

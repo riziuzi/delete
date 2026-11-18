@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -96,10 +97,10 @@ fun ProgressScreen(nav: Nav) {
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Tile(tr("${week.activeDays} of 7", "7 में ${week.activeDays}"), tr("days this week", "दिन इस हफ्ते"), Modifier.weight(1f))
-            Tile(JournalWriter.duration(week.studyMinutes, lang), tr("studied this week", "पढ़ाई इस हफ्ते"), Modifier.weight(1f))
-            Tile(tr("$streak days", "$streak दिन"), tr("current run", "लगातार"), Modifier.weight(1f))
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tile(tr("${week.activeDays} of 7", "7 में ${week.activeDays}"), tr("days this week", "दिन इस हफ्ते"), Modifier.weight(1f).fillMaxHeight())
+            Tile(JournalWriter.duration(week.studyMinutes, lang), tr("studied this week", "पढ़ाई इस हफ्ते"), Modifier.weight(1f).fillMaxHeight())
+            Tile(tr("$streak days", "$streak दिन"), tr("current run", "लगातार"), Modifier.weight(1f).fillMaxHeight())
         }
 
         if (monthView) {

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.t
 import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
@@ -34,8 +35,25 @@ class AlarmReceiver : BroadcastReceiver() {
                 Notifications.post(ctx, Notifications.ID_AWAKE, n)
             }
             AlarmScheduler.ACTION_CHECK_IN -> {
-                if (Store.get(ctx).activeSession() == null || prefs.checkInMin <= 0) {
+                val session = Store.get(ctx).activeSession()
+                if (session == null || prefs.checkInMin <= 0) {
                     AlarmScheduler.cancelCheckIn(ctx)
+                    return
+                }
+                // Forgot to stop? After 3 unanswered check-ins, end the session at the last sign of studying.
+                val now = System.currentTimeMillis()
+                val lastSign = maxOf(session.startMs, session.checkIns.filter { it.text.isNotBlank() || it.kind == CheckInKind.SWITCH }.maxOfOrNull { it.timeMs } ?: 0L)
+                val intervalMs = prefs.checkInMin * 60_000L
+                if (now - lastSign > 3 * intervalMs + 5 * 60_000L) {
+                    Store.get(ctx).endSession(session.id, lastSign + intervalMs)
+                    AlarmScheduler.cancelCheckIn(ctx)
+                    Notifications.cancel(ctx, Notifications.ID_SESSION)
+                    Notifications.simple(
+                        ctx, Notifications.ID_STUDY,
+                        lang.t("Study session stopped", "पढ़ाई सेशन रोका गया"),
+                        lang.t("No answer to the last 3 check-ins, so it was saved until your last one.", "पिछले 3 चेक-इन का जवाब नहीं मिला, इसलिए आखिरी चेक-इन तक सेव किया।"),
+                        Intent(ctx, MainActivity::class.java),
+                    )
                     return
                 }
                 AlarmScheduler.scheduleNextCheckIn(ctx)

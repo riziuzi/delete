@@ -123,8 +123,8 @@ fun SectionLabel(text: String) {
 }
 
 @Composable
-fun Muted(text: String, modifier: Modifier = Modifier) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+fun Muted(text: String, modifier: Modifier = Modifier, textAlign: androidx.compose.ui.text.style.TextAlign? = null) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier, textAlign = textAlign)
 }
 
 @Composable

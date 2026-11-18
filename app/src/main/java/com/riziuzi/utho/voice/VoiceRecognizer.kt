@@ -50,7 +50,7 @@ class VoiceRecognizer(
     fun start() {
         active = true
         finished = false
-        if (!create(onDevice = true)) return
+        if (!create(onDevice = !triedSystem)) return
         listen()
     }
 

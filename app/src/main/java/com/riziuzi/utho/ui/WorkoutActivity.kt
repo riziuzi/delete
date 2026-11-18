@@ -248,8 +248,10 @@ private fun WorkoutScreen(
             verticalAlignment = Alignment.Bottom,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(exerciseLabel(exercise) + " · " + levelLabel(level), color = Color(0xFFB9BCC6), fontSize = 14.sp)
-                Text(tr("Place the phone 1.5–2 m away", "फोन 1.5–2 मीटर दूर रखें"), color = Color(0xFFB9BCC6), fontSize = 13.sp)
+                Column(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xCC17181C)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text(exerciseLabel(exercise) + " · " + levelLabel(level), color = Color.White, fontSize = 14.sp)
+                    Text(tr("Place the phone 1.5–2 m away", "फोन 1.5–2 मीटर दूर रखें"), color = Color(0xFFDADCE3), fontSize = 13.sp)
+                }
             }
             if (alarm) {
                 HoldToStop(emergencySec) {
@@ -261,7 +263,10 @@ private fun WorkoutScreen(
                     }
                 }
             } else {
-                TextButton(onClick = onClose) { Text(tr("Close", "बंद करें"), color = Color.White, fontSize = 16.sp) }
+                TextButton(
+                    onClick = onClose,
+                    modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Color(0xCC17181C)),
+                ) { Text(tr("Close", "बंद करें"), color = Color.White, fontSize = 16.sp) }
             }
         }
     }
@@ -336,7 +341,10 @@ private fun DepthBar(state: CounterState, exercise: Exercise, modifier: Modifier
             else -> tr("DOWN", "नीचे")
         }
     }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp)).background(Color(0x99000000)).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(top, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Box(
             Modifier.weight(1f).width(36.dp).padding(vertical = 6.dp).clip(RoundedCornerShape(18.dp))
