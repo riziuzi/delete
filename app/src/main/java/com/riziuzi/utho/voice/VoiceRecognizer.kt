@@ -95,7 +95,10 @@ class VoiceRecognizer(
         }
         active = false
         main.removeCallbacksAndMessages(null)
+        // Release the speech service right away (it beeps when it lets go of the mic), while media is still muted.
         runCatching { recognizer?.cancel() }
+        runCatching { recognizer?.destroy() }
+        recognizer = null
         finish()
     }
 

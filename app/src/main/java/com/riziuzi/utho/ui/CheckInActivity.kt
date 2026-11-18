@@ -162,6 +162,9 @@ private enum class Stage { LISTENING, TYPING, RESULT, MISSED }
 /** A note you start yourself listens until you tap Done (with a 30-minute safety stop). */
 private const val NOTE_MAX_MS = 30 * 60_000L
 
+/** How long media stays muted after the mic closes, so the speech service's closing beep can't be heard. */
+private const val UNMUTE_DELAY_MS = 2000L
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CheckInScreen(
@@ -215,8 +218,8 @@ private fun CheckInScreen(
             micOpen = false
             Earcons.play(ctx, sound, open = false)
         }
-        // The recogniser's own stop beep comes just after it stops; keep media muted until it has passed.
-        Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, 800)
+        // The speech service beeps when it releases the mic (done in cancel/destroy); keep media muted until that has passed.
+        Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, UNMUTE_DELAY_MS)
     }
 
     fun save() {
@@ -330,8 +333,9 @@ private fun CheckInScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // Closing while the mic is on: let the service go while muted, then bring media back.
             recognizer.destroy()
-            muter.unmute()
+            Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, UNMUTE_DELAY_MS)
         }
     }
 
