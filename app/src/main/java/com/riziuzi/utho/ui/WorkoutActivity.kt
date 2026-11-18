@@ -231,7 +231,11 @@ private fun WorkoutScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val big = if (exercise.isHold) "${JournalWriter.seconds(count, com.riziuzi.utho.core.Lang.EN)} / ${JournalWriter.seconds(target, com.riziuzi.utho.core.Lang.EN)}" else "$count / $target"
-            Text(big, fontSize = 56.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.testTag("workoutCount"))
+            Text(
+                big, fontSize = 52.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xCC17181C))
+                    .padding(horizontal = 20.dp, vertical = 2.dp).testTag("workoutCount"),
+            )
             Text(
                 when {
                     finished -> tr("Done! Great start.", "हो गया! बढ़िया शुरुआत।")
