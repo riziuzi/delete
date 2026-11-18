@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +20,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -109,6 +112,7 @@ class CheckInActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -260,7 +264,8 @@ private fun CheckInScreen(
         when {
             target != null -> {
                 store.updateCheckIn(target.timeMs) { c }
-                if (timed) CheckIns.answered(ctx)
+                // An answer to the check-in waiting now (pop-up or journal) keeps study going.
+                if (timed || session?.checkIns?.any { it.timeMs == target.timeMs } == true) CheckIns.answered(ctx)
             }
             session != null && timed -> store.addCheckIn(session.id, c)
             session != null -> store.addCheckIn(session.id, c.copy(timeMs = System.currentTimeMillis()))
@@ -440,9 +445,12 @@ private fun CheckInScreen(
         else -> tr("What did you study? How's your mood?", "Kya padha? Mood kaisa hai?")
     }
 
-    Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()
-            .verticalScroll(rememberScrollState()).padding(24.dp),
+    // Centred on the screen like a dialog; with the keyboard up it sits in the space above it.
+    Box(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding(),
+        contentAlignment = Alignment.Center,
+    ) { Column(
+        Modifier.fillMaxWidth().widthIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -469,25 +477,32 @@ private fun CheckInScreen(
                 val live = (raw + listOf(partial)).filter { it.isNotBlank() }.joinToString(" ") { Hinglish.convert(it) }
                 Text(
                     live.ifBlank {
-                        if (ready) tr("Listening… speak now", "Sun rahe hain… ab bolein") else tr("Getting the mic ready…", "Mic ready ho raha hai…")
+                        when {
+                            problem != null -> tr("The mic didn't start", "Mic shuru nahi hua")
+                            ready -> tr("Listening… speak now", "Sun rahe hain… ab bolein")
+                            else -> tr("Getting the mic ready…", "Mic ready ho raha hai…")
+                        }
                     },
                     fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().testTag("checkInLive"),
                 )
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
                 ButtonsRow {
-                    if (!auto) {
-                        SecondButton(tr("Type", "Type"), {
-                            recognizer.destroy()
-                            closeMic()
-                            val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
-                            typed = if (heard.isEmpty()) "" else Hinglish.note(heard)
-                            stage = Stage.TYPING
-                        }, Modifier.weight(1f).testTag("checkInTypeInstead"))
-                    }
+                    // Typing works everywhere, also when you can't talk (library) or the mic fails.
+                    SecondButton(tr("Type", "Type"), {
+                        recognizer.destroy()
+                        closeMic()
+                        val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
+                        typed = if (heard.isEmpty()) "" else Hinglish.note(heard)
+                        stage = Stage.TYPING
+                    }, Modifier.weight(1f).testTag("checkInTypeInstead"))
                     BigButton(tr("Done", "Ho gaya"), { stopListening() }, Modifier.weight(1f).testTag("checkInDone"))
                 }
                 if (auto) {
-                    Muted(tr("Say nothing and study stops here.", "Kuch nahi bolenge to padhai yahin ruk jaayegi."), textAlign = TextAlign.Center)
+                    Muted(
+                        if (test) tr("This is a test. Nothing is saved.", "Yeh test hai. Kuch save nahi hoga.")
+                        else tr("Say nothing and study stops here.", "Kuch nahi bolenge to padhai yahin ruk jaayegi."),
+                        textAlign = TextAlign.Center,
+                    )
                 } else {
                     SmallTextButton(tr("Cancel", "Cancel")) {
                         recognizer.destroy()
@@ -503,7 +518,12 @@ private fun CheckInScreen(
                 val focus = remember { FocusRequester() }
                 OutlinedTextField(
                     value = typed, onValueChange = { typed = it }, minLines = 3,
-                    placeholder = { Text("Polity ke fundamental rights padhe, mood accha hai") },
+                    placeholder = {
+                        Text(
+                            tr("e.g. Polity, fundamental rights. Feeling good.", "jaise: Polity ke fundamental rights padhe, mood accha hai"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("checkInType"),
                 )
                 LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -513,7 +533,21 @@ private fun CheckInScreen(
                         if (typed.isNotBlank()) analyse(typed, Hinglish.note(listOf(typed)))
                     }, Modifier.weight(1f).testTag("checkInNext"), enabled = typed.isNotBlank())
                 }
-                SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
+                if (timed) {
+                    Muted(tr("Cancel and study stops here.", "Cancel karne par padhai yahin ruk jaayegi."), textAlign = TextAlign.Center)
+                    SmallTextButton(tr("Cancel", "Cancel")) { noAnswer() }
+                } else {
+                    SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
+                }
+                // A timed pop-up left open with nothing typed doesn't keep the screen on forever.
+                if (timed) {
+                    LaunchedEffect(typed) {
+                        delay(90_000)
+                        if (stage == Stage.TYPING) {
+                            if (typed.isNotBlank()) analyse(typed, Hinglish.note(listOf(typed))) else noAnswer()
+                        }
+                    }
+                }
             }
 
             Stage.RESULT -> {
@@ -581,10 +615,11 @@ private fun CheckInScreen(
                         beginStudy(ctx, session.checkIns.lastOrNull { it.topic != null }?.topic ?: session.subject)
                         onDone()
                     }, Modifier.testTag("keepStudying"))
+                    SmallTextButton(tr("Close", "Band karein")) { onDone() }
                 }
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -606,6 +641,7 @@ private fun Ring(fraction: Float, level: Float, label: String) {
 class AwakeCheckActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

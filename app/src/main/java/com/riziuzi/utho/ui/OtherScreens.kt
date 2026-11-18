@@ -247,19 +247,13 @@ fun ProfileScreen(nav: Nav) {
         ) { DatePicker(state = state) }
     }
     if (editGoal) {
-        var hours by remember { mutableIntStateOf(goal / 60) }
-        AlertDialog(
-            onDismissRequest = { editGoal = false },
-            title = { Text(tr("Daily study goal", "Roz ka target")) },
-            text = { Stepper("$hours " + tr("hours", "ghante"), { hours = (hours - 1).coerceAtLeast(1) }, { hours = (hours + 1).coerceAtMost(16) }) },
-            confirmButton = {
-                TextButton(onClick = {
-                    prefs.dailyGoalMin = hours * 60
-                    editGoal = false
-                }) { Text(tr("Save", "Save")) }
-            },
-            dismissButton = { TextButton(onClick = { editGoal = false }) { Text(tr("Cancel", "Cancel")) } },
-        )
+        DurationDialog(
+            tr("Daily study goal", "Roz ka target"), goal * 60, hours = true, minSec = 15 * 60, maxSec = 16 * 3600,
+            note = null, onDismiss = { editGoal = false }, seconds = false,
+        ) {
+            prefs.dailyGoalMin = it / 60
+            editGoal = false
+        }
     }
 }
 
@@ -490,6 +484,7 @@ private fun PackRow(name: String, tag: String) {
 
     LaunchedEffect(check) {
         VoiceRecognizer.packStatus(ctx, tag) { st ->
+            if (st == VoiceRecognizer.Companion.Pack.INSTALLED) VoiceRecognizer.retryOnDevice(ctx)
             ui = when (st) {
                 VoiceRecognizer.Companion.Pack.INSTALLED -> PackUi.INSTALLED
                 VoiceRecognizer.Companion.Pack.DOWNLOADING -> if (ui == PackUi.WAITING) PackUi.WAITING else PackUi.DOWNLOADING
@@ -601,7 +596,7 @@ fun LearnedScreen(nav: Nav) {
             CardBox(modifier = Modifier.testTag("learned-$subject")) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(subject, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    Muted(tr("$notes notes", "$notes notes"))
+                    Muted(if (notes == 1) "1 note" else "$notes notes")
                 }
                 if (words.isEmpty()) {
                     Muted(tr("Nothing learned yet.", "Abhi kuch nahi seekha."))
@@ -653,8 +648,8 @@ fun CheckInTiming() {
         ) {
             every = it
             prefs.checkInSec = it
-            if (listen >= it) {
-                listen = (it - 10).coerceAtLeast(5)
+            if (listen > it / 2) {
+                listen = (it / 2).coerceAtLeast(5)
                 prefs.listenSeconds = listen
             }
             AlarmScheduler.scheduleNextCheckIn(ctx)
@@ -663,7 +658,7 @@ fun CheckInTiming() {
     }
     if (pickListen) {
         DurationDialog(
-            tr("The pop-up listens for", "Pop-up kitni der sunega"), listen, hours = false, minSec = 5, maxSec = minOf(5 * 60, every - 10),
+            tr("The pop-up listens for", "Pop-up kitni der sunega"), listen, hours = false, minSec = 5, maxSec = minOf(5 * 60, every / 2),
             note = tr("If you stop talking, it finishes early.", "Bolna band karenge to pehle hi ruk jaayega."), onDismiss = { pickListen = false },
         ) {
             listen = it

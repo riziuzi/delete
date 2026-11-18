@@ -298,6 +298,9 @@ class VoiceRecognizer(
         @RequiresApi(33)
         enum class Pack { INSTALLED, DOWNLOADING, NOT_INSTALLED, UNAVAILABLE }
 
+        /** A voice pack is on the phone now: use the offline recogniser again (it was skipped after failing). */
+        fun retryOnDevice(context: Context) = context.getSharedPreferences(MEMO, Context.MODE_PRIVATE).edit().clear().apply()
+
         private fun packIntent(tag: String) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)

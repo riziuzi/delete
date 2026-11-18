@@ -8,6 +8,8 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -161,6 +163,27 @@ class CheckInFlowTest {
         val c = store.activeSession()!!.checkIns.single { it.timeMs == t }
         assertEquals(CheckInKind.SPOKEN, c.kind)
         assertNull(c.topic)
+    }
+
+    @Test fun typingInATimedPopupKeepsStudying() {
+        Prefs(ctx).listenSeconds = 30
+        beginStudy(ctx, "History")
+        val session = store.activeSession()!!
+        val t = System.currentTimeMillis()
+        store.addCheckIn(session.id, CheckIn(t, "", null, CheckInKind.MISSED))
+        ctx.startActivity(CheckInActivity.timedIntent(ctx, t).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        waitForTag("checkInTypeInstead")
+        tag("checkInTypeInstead").performClick()
+        waitForTag("checkInType")
+        tag("checkInType").performTextInput("economy mein inflation aur repo rate padha")
+        shot("flow-5-timed-typing")
+        tag("checkInNext").performClick()
+        waitForTag("checkInSubject")
+        tag("checkInSubject").assertTextEquals("Subject: Economy")
+        passTime(5_000) // saves and closes by itself
+        val c = store.activeSession()!!.checkIns.single { it.timeMs == t }
+        assertEquals(CheckInKind.SPOKEN, c.kind)
+        assertEquals("Economy", c.topic)
     }
 
     @Test fun popupNeverShownStopsStudyAtTheDeadline() {

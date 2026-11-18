@@ -33,6 +33,11 @@ object CheckIns {
             AlarmScheduler.cancelCheckIn(ctx)
             return
         }
+        // The previous check-in is still unanswered (its pop-up never got an answer): that's no answer.
+        session.checkIns.lastOrNull { it.kind == CheckInKind.MISSED }?.let {
+            noAnswer(ctx, it.timeMs)
+            return
+        }
         store.addCheckIn(session.id, CheckIn(nowMs, "", null, CheckInKind.MISSED))
         AlarmScheduler.scheduleNextCheckIn(ctx, nowMs)
         AlarmScheduler.scheduleDeadline(ctx, nowMs + (prefs.listenSeconds + GRACE_SEC) * 1000L, nowMs)
@@ -81,10 +86,14 @@ object CheckIns {
         Notifications.cancel(ctx, Notifications.ID_SESSION)
         val lang = Prefs(ctx).lang
         val at = JournalWriter.clock(timeMs, Summaries.zone, lang)
+        val stop = JournalWriter.clock(endAt, Summaries.zone, lang)
         Notifications.simple(
             ctx, Notifications.ID_STUDY,
             lang.t("Study stopped", "Padhai ruk gayi"),
-            lang.t("No answer to the $at check-in, so the timer stopped there.", "$at ke check-in ka jawaab nahi mila, isliye timer wahin ruk gaya."),
+            lang.t(
+                "Nothing was said at the $at check-in, so study stopped at $stop.",
+                "$at ke check-in par kuch nahi bola, isliye padhai $stop par ruk gayi.",
+            ),
             Intent(ctx, MainActivity::class.java),
         )
         return endAt

@@ -71,6 +71,8 @@ import java.time.temporal.ChronoUnit
 /** Starts a study session: saves it, shows the timer notification, plans the first voice check-in. */
 fun beginStudy(ctx: Context, subject: String) {
     val s = Store.get(ctx).startSession(subject)
+    // A "Study stopped" notice from before is out of date now.
+    Notifications.cancel(ctx, Notifications.ID_STUDY)
     Notifications.showSession(ctx, s)
     AlarmScheduler.scheduleNextCheckIn(ctx, s.startMs)
 }

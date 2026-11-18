@@ -38,7 +38,7 @@ private val ItemHeight = 44.dp
 
 /** One scrolling dial (like an alarm clock's): the number in the middle band is the value. */
 @Composable
-fun Wheel(range: IntRange, value: Int, onChange: (Int) -> Unit, label: String, modifier: Modifier = Modifier) {
+fun Wheel(range: IntRange, value: Int, onChange: (Int) -> Unit, label: String, tag: String, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
     val values = remember(range) { range.toList() }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (value - range.first).coerceIn(0, values.lastIndex))
@@ -56,7 +56,7 @@ fun Wheel(range: IntRange, value: Int, onChange: (Int) -> Unit, label: String, m
             Box(Modifier.fillMaxWidth().height(ItemHeight).clip(RoundedCornerShape(12.dp)).background(cs.primaryContainer))
             LazyColumn(
                 state = state, flingBehavior = fling, contentPadding = PaddingValues(vertical = ItemHeight),
-                horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize().testTag("wheel-$label"),
+                horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize().testTag("wheel-$tag"),
             ) {
                 items(values.size) { i ->
                     val on = i == selected
@@ -88,21 +88,22 @@ fun DurationDialog(
     maxSec: Int,
     note: String?,
     onDismiss: () -> Unit,
+    seconds: Boolean = true,
     onPick: (Int) -> Unit,
 ) {
     var h by remember { mutableIntStateOf(if (hours) initialSec / 3600 else 0) }
     var m by remember { mutableIntStateOf(if (hours) initialSec % 3600 / 60 else initialSec / 60) }
     var s by remember { mutableIntStateOf(initialSec % 60) }
-    val total = h * 3600 + m * 60 + s
+    val total = h * 3600 + m * 60 + if (seconds) s else 0
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                    if (hours) Wheel(0..23, h, { h = it }, "hours")
-                    Wheel(0..(if (hours) 59 else maxSec / 60), m, { m = it }, "min")
-                    Wheel(0..59, s, { s = it }, "sec")
+                    if (hours) Wheel(0..23, h, { h = it }, tr("hours", "ghante"), "hours")
+                    Wheel(0..(if (hours) 59 else maxSec / 60), m, { m = it }, tr("min", "minute"), "min")
+                    if (seconds) Wheel(0..59, s, { s = it }, tr("sec", "second"), "sec")
                 }
                 when {
                     total < minSec -> Text(tr("Shortest is ", "Kam se kam ") + com.riziuzi.utho.core.JournalWriter.span(minSec, LocalLang.current), color = MaterialTheme.colorScheme.error)

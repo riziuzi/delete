@@ -1,5 +1,6 @@
 package com.riziuzi.utho.ui
 
+import com.riziuzi.utho.core.JournalWriter
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -84,7 +85,8 @@ fun SetupScreen(onDone: () -> Unit) {
     var examDate by remember { mutableLongStateOf(prefs.examDate) }
     var subjects by remember { mutableStateOf(prefs.subjects) }
     var subjectsTouched by remember { mutableStateOf(prefs.subjects.isNotEmpty()) }
-    var goalHours by remember { mutableIntStateOf(prefs.dailyGoalMin / 60) }
+    var goalMin by remember { mutableIntStateOf(prefs.dailyGoalMin) }
+    var pickGoal by remember { mutableStateOf(false) }
     var alarmOn by remember { mutableStateOf(true) }
     var hour by remember { mutableIntStateOf(prefs.alarmHour) }
     var minute by remember { mutableIntStateOf(prefs.alarmMinute) }
@@ -105,7 +107,7 @@ fun SetupScreen(onDone: () -> Unit) {
         prefs.exam = examKey
         prefs.examDate = examDate
         prefs.subjects = currentSubjects()
-        prefs.dailyGoalMin = goalHours * 60
+        prefs.dailyGoalMin = goalMin
         prefs.alarmEnabled = alarmOn
         prefs.alarmHour = hour
         prefs.alarmMinute = minute
@@ -221,8 +223,9 @@ fun SetupScreen(onDone: () -> Unit) {
                             }
                         }) { Icon(Icons.Filled.Add, contentDescription = tr("Add", "Jodein")) }
                     }
-                    Text(tr("Daily study goal", "Roz ka padhai target"), fontWeight = FontWeight.SemiBold)
-                    Stepper("$goalHours " + tr("hours", "ghante"), { goalHours = (goalHours - 1).coerceAtLeast(1) }, { goalHours = (goalHours + 1).coerceAtMost(16) })
+                    Box(Modifier.testTag("setupGoal")) {
+                        NavRow(tr("Daily study goal", "Roz ka padhai target"), JournalWriter.duration(goalMin, lang), { pickGoal = true })
+                    }
                 }
                 3 -> {
                     Text(tr("Morning alarm", "Subah ka alarm"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -264,6 +267,15 @@ fun SetupScreen(onDone: () -> Unit) {
         }
     }
 
+    if (pickGoal) {
+        DurationDialog(
+            tr("Daily study goal", "Roz ka padhai target"), goalMin * 60, hours = true, minSec = 15 * 60, maxSec = 16 * 3600,
+            note = null, onDismiss = { pickGoal = false }, seconds = false,
+        ) {
+            goalMin = it / 60
+            pickGoal = false
+        }
+    }
     if (showDate) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = if (examDate >= 0) LocalDate.ofEpochDay(examDate).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() else null,

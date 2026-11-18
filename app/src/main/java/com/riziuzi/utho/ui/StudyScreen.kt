@@ -87,8 +87,8 @@ fun StudyScreen(nav: Nav) {
                 }
                 Muted(
                     tr(
-                        "A pop-up listens for $listenSpan. No answer: those $span aren't counted until you answer.",
-                        "Pop-up $listenSpan sunega. Jawaab nahi diya to woh $span tab tak count nahi honge jab tak jawaab na dein.",
+                        "A pop-up listens for $listenSpan. Say anything and study goes on. Say nothing and study stops at your last answer.",
+                        "Pop-up $listenSpan sunega. Kuch bhi bolein to padhai chalti rahegi. Kuch nahi bola to padhai pichhle jawaab par ruk jaayegi.",
                     ),
                 )
             } else {
