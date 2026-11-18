@@ -6,6 +6,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -125,6 +130,9 @@ fun PopupSetupScreen(nav: Nav) {
                 tr("Opens by itself while you're using the phone.", "Phone chalate waqt bhi apne aap khule."),
                 "setup-overlay",
             ) { open(ctx, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")), appDetails(ctx)) }
+            // Android 13+ blocks this switch for apps installed from a downloaded APK ("App was denied access")
+            // until "Allow restricted settings" is turned on in the app's info page.
+            if (!overApps && Build.VERSION.SDK_INT >= 33) RestrictedHelp { open(ctx, appDetails(ctx)) }
             Divider()
             SetupRow(
                 battery, tr("No battery limits", "Battery ki rok nahi"),
@@ -177,5 +185,45 @@ private fun SetupRow(on: Boolean?, title: String, sub: String, tag: String, onOp
             Muted(sub)
         }
         if (on != true) SmallTextButton(if (on == null) tr("Open", "Kholein") else tr("Allow", "Allow karein")) { onOpen() }
+    }
+}
+
+/** Steps from Google's help page (support.google.com/android/?p=restricted_settings), with a button to the app's info page. */
+@Composable
+private fun RestrictedHelp(openAppInfo: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().padding(start = 34.dp).clip(RoundedCornerShape(12.dp)).background(cs.surfaceVariant)
+            .padding(12.dp).testTag("restrictedHelp"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            tr("Says \"App was denied access\"?", "\"App was denied access\" aa raha hai?"),
+            fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+        )
+        Muted(
+            tr(
+                "Android locks this switch for apps installed from a downloaded file. To unlock it:",
+                "Download ki hui file se install hui apps ke liye Android yeh switch lock kar deta hai. Kholne ke liye:",
+            ),
+        )
+        listOf(
+            tr("Tap Open app info below.", "Neeche Open app info dabayein."),
+            tr("Tap ⋮ (top right) › Allow restricted settings, and confirm with your screen lock.",
+                "⋮ (upar daayein) › Allow restricted settings dabayein, aur screen lock se confirm karein."),
+            tr("Come back here and tap Allow on Appear on top.", "Yahan wapas aakar Upar dikhe par Allow dabayein."),
+        ).forEachIndexed { i, step ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${i + 1}.", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.primary)
+                Text(step, fontSize = 13.sp, color = cs.onSurfaceVariant)
+            }
+        }
+        Muted(
+            tr(
+                "The ⋮ option shows up only after Android has said no once.",
+                "⋮ wala option tabhi dikhta hai jab Android ek baar mana kar chuka ho.",
+            ),
+        )
+        SmallTextButton(tr("Open app info", "App info kholein")) { openAppInfo() }
     }
 }
