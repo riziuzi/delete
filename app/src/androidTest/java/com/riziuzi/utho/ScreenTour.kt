@@ -239,6 +239,7 @@ class ScreenTour {
             org.junit.Assert.assertEquals("", it.last().text)
             org.junit.Assert.assertEquals(CheckInKind.MISSED, it.last().kind)
         }
+        passTime(4_000) // the "nothing heard" screen closes by itself
 
         // ---- still awake?
         startActivity(Intent(ctx, AwakeCheckActivity::class.java))

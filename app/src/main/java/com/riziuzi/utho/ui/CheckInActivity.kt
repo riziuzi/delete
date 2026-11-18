@@ -84,6 +84,25 @@ import java.time.Instant
  * The text is written in Hinglish; subject and mood are picked automatically and can be fixed with a tap.
  */
 class CheckInActivity : ComponentActivity() {
+    private var shownMode: Mode? = null
+
+    /**
+     * The pop-up is single-top, so a new request (Speak, a missed-check-in notification) arrives here while one is
+     * open. It replaces the open one, except that a timed pop-up never interrupts a note you're in the middle of:
+     * that check-in stays missed and its notification lets you answer it after.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val newMode = Mode.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_MODE) } ?: Mode.TIMED
+        val time = intent.getLongExtra(EXTRA_TIME, -1L)
+        if (newMode == Mode.TIMED && shownMode != null && shownMode != Mode.TIMED) {
+            if (time > 0) Notifications.showMissed(this, time)
+            return
+        }
+        setIntent(intent)
+        recreate()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
@@ -105,6 +124,7 @@ class CheckInActivity : ComponentActivity() {
         }
         if (target != null) Notifications.cancel(this, Notifications.ID_MISSED)
         com.riziuzi.utho.data.MeaningModel.preload(this)
+        shownMode = mode
         val typeFirst = intent.getBooleanExtra(EXTRA_TYPE, false)
         val prefs = Prefs(this)
         setContent {
