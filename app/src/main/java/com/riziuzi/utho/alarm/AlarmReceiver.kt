@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.riziuzi.utho.core.CheckIn
 import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.t
 import com.riziuzi.utho.data.Prefs
@@ -45,7 +46,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 val lastSign = maxOf(session.startMs, session.checkIns.filter { it.text.isNotBlank() || it.kind == CheckInKind.SWITCH }.maxOfOrNull { it.timeMs } ?: 0L)
                 val intervalMs = prefs.checkInMin * 60_000L
                 if (now - lastSign > 3 * intervalMs + 5 * 60_000L) {
-                    Store.get(ctx).endSession(session.id, lastSign + intervalMs)
+                    Store.get(ctx).endSession(session.id, lastSign)
                     AlarmScheduler.cancelCheckIn(ctx)
                     Notifications.cancel(ctx, Notifications.ID_SESSION)
                     Notifications.simple(
@@ -57,11 +58,14 @@ class AlarmReceiver : BroadcastReceiver() {
                     return
                 }
                 AlarmScheduler.scheduleNextCheckIn(ctx)
+                // Saved as missed right away; the pop-up (or a later answer) fills it in. Unanswered, this
+                // half hour isn't counted, even if the pop-up never got to show.
+                Store.get(ctx).addCheckIn(session.id, CheckIn(now, "", null, CheckInKind.MISSED))
                 val n = Notifications.fullScreen(
                     ctx, Notifications.ID_CHECKIN, Notifications.CH_CHECKIN,
                     lang.t("Quick check-in", "Quick check-in"),
                     lang.t("Say what you studied in the last ${prefs.checkInMin} min", "Bataiye pichhle ${prefs.checkInMin} minute mein kya padha aur mood kaisa hai"),
-                    Intent(ctx, CheckInActivity::class.java), NotificationCompat.CATEGORY_REMINDER,
+                    CheckInActivity.timedIntent(ctx, now), NotificationCompat.CATEGORY_REMINDER,
                 )
                 Notifications.post(ctx, Notifications.ID_CHECKIN, n)
             }

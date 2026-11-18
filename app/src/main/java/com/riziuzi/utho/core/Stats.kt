@@ -28,6 +28,8 @@ object Stats {
                     current = c.topic ?: current
                     from = t
                 }
+                // Unanswered: that stretch is not counted.
+                CheckInKind.MISSED -> from = maxOf(from, t)
             }
         }
         if (end > from) out += Segment(from, end, current)
@@ -79,15 +81,28 @@ object Stats {
         return ms.mapValues { (it.value / 60_000L).toInt() }
     }
 
-    /** Longest single session (clipped to the day), in minutes. */
+    /** Longest unbroken stretch of counted study (clipped to the day), in minutes. */
     fun longestBlockMinutes(sessions: List<StudySession>, date: LocalDate, zone: ZoneId, nowMs: Long): Int {
         val from = dayStart(date, zone)
         val to = dayEnd(date, zone)
-        return sessions.maxOfOrNull { s ->
-            val a = max(s.startMs, from)
-            val b = min(s.endMs ?: nowMs, to)
-            if (b > a) ((b - a) / 60_000L).toInt() else 0
-        } ?: 0
+        var best = 0L
+        for (s in sessions) {
+            var blockStart = -1L
+            var blockEnd = -1L
+            for (seg in segments(s, nowMs)) {
+                val a = max(seg.startMs, from)
+                val b = min(seg.endMs, to)
+                if (b <= a) continue
+                if (blockStart >= 0 && a == blockEnd) {
+                    blockEnd = b
+                } else {
+                    blockStart = a
+                    blockEnd = b
+                }
+                best = max(best, blockEnd - blockStart)
+            }
+        }
+        return (best / 60_000L).toInt()
     }
 
     /** A day counts when there were at least 30 minutes of study or any completed workout. */

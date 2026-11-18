@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.Exercise
 import com.riziuzi.utho.core.Lang
 import com.riziuzi.utho.core.Level
@@ -69,6 +71,19 @@ class ScreenTour {
         rule.waitForIdle()
     }
 
+    private val noteRow = androidx.compose.ui.test.SemanticsMatcher("a note row") {
+        it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("note-") == true
+    }
+
+    /** The test pauses Compose timers unless its clock is moved; the pop-up itself counts wall time. */
+    private fun passTime(ms: Long) {
+        val end = System.currentTimeMillis() + ms
+        while (System.currentTimeMillis() < end) {
+            rule.mainClock.advanceTimeBy(250)
+            Thread.sleep(250)
+        }
+    }
+
     private fun startActivity(intent: Intent) {
         ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
@@ -118,10 +133,33 @@ class ScreenTour {
             runCatching { it.performClick() }.onFailure { tag("day-${java.time.LocalDate.now().dayOfMonth}").performClick() }
         }
         shot("13-journal-en")
+        // Tap a line to read it.
+        rule.onAllNodes(noteRow, useUnmergedTree = true)[0].performClick()
+        shot("14-journal-note-open")
         click("Hinglish")
-        shot("14-journal-hinglish")
-        click("Good")
-        shot("15-journal-mood")
+        shot("15-journal-hinglish")
+        // Answer yesterday's missed check-in by typing.
+        val store = com.riziuzi.utho.data.Store.get(ctx)
+        val missedAt = store.sessions.flatMap { it.checkIns }.first { it.kind == CheckInKind.MISSED }.timeMs
+        tag("note-$missedAt").performScrollTo().performClick()
+        shot("15b-answer-missed", 1500)
+        tag("checkInTypeInstead").performClick()
+        tag("checkInType").performTextInput("polity ke fundamental rights padhe, mood accha hai")
+        tag("checkInNext").performClick()
+        shot("15c-answer-result", 300)
+        tag("checkInSubject").assertTextEquals("Subject: Polity")
+        tag("checkInMood").assertTextEquals("Mood: Good")
+        tag("checkInSave").performClick()
+        Thread.sleep(800)
+        rule.waitForIdle()
+        store.findCheckIn(missedAt)!!.let {
+            org.junit.Assert.assertEquals(CheckInKind.SPOKEN, it.kind)
+            org.junit.Assert.assertEquals("Polity", it.topic)
+            org.junit.Assert.assertEquals(1, it.mood)
+        }
+        shot("15d-journal-answered")
+        tag("mood-1").performScrollTo().performClick()
+        shot("15e-journal-mood")
         back()
 
         // ---- group
@@ -160,34 +198,28 @@ class ScreenTour {
         shot("27-workout-plank", 4000)
         back()
 
-        // ---- voice check-in from the Speak button (session is still running)
-        val store = com.riziuzi.utho.data.Store.get(ctx)
+        // ---- a note from the Speak button (session is still running); no time limit, stop with Done
         tag("speakNote").performScrollTo().performClick()
-        shot("28-checkin-listening", 2500)
+        shot("28-note-listening", 2500)
         tag("checkInDone").performClick()
-        shot("29-checkin-review", 300)
-        // Nothing was heard on the emulator: fix the subject and mood by hand, then save.
-        rule.onNodeWithText("History", useUnmergedTree = true).performClick()
-        rule.onNodeWithText("Good", useUnmergedTree = true).performClick()
-        shot("29b-checkin-fixed", 300)
+        // The emulator can't hear: it offers typing instead.
+        shot("29-note-type", 300)
+        tag("checkInType").performTextInput("aaj history ke mughal empire padhe, thoda thak gaya")
+        tag("checkInNext").performClick()
+        shot("29b-note-result", 300)
+        tag("checkInSubject").assertTextEquals("Subject: History")
+        tag("checkInMood").assertTextEquals("Mood: Tired")
         tag("checkInSave").performClick()
         Thread.sleep(800)
+        rule.waitForIdle()
         store.activeSession()!!.checkIns.last().let {
             org.junit.Assert.assertEquals("History", it.topic)
-            org.junit.Assert.assertEquals(1, it.mood)
+            org.junit.Assert.assertEquals(3, it.mood)
         }
 
-        // ---- the timed pop-up when nobody answers: waits 15 s, says "not selected / not said", closes by itself
+        // ---- the timed pop-up when nobody answers: 15 s, then saved as missed (not counted) and closes
         val before = store.activeSession()!!.checkIns.size
         startActivity(Intent(ctx, CheckInActivity::class.java))
-        // The test pauses Compose timers unless its clock is moved; the pop-up itself counts wall time.
-        fun passTime(ms: Long) {
-            val end = System.currentTimeMillis() + ms
-            while (System.currentTimeMillis() < end) {
-                rule.mainClock.advanceTimeBy(250)
-                Thread.sleep(250)
-            }
-        }
         passTime(7_000)
         shot("29c-checkin-waiting", 100)
         passTime(9_000)
@@ -199,6 +231,7 @@ class ScreenTour {
             org.junit.Assert.assertNull(it.last().topic)
             org.junit.Assert.assertNull(it.last().mood)
             org.junit.Assert.assertEquals("", it.last().text)
+            org.junit.Assert.assertEquals(CheckInKind.MISSED, it.last().kind)
         }
 
         // ---- still awake?

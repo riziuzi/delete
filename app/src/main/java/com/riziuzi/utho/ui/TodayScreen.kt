@@ -194,7 +194,7 @@ fun TodayScreen(nav: Nav) {
             }
         }
 
-        CardBox(onClick = { ctx.startActivity(CheckInActivity.manualIntent(ctx)) }, modifier = Modifier.testTag("speakNote")) {
+        CardBox(onClick = { ctx.startActivity(CheckInActivity.noteIntent(ctx)) }, modifier = Modifier.testTag("speakNote")) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Box(
                     Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
@@ -237,12 +237,16 @@ fun TodayScreen(nav: Nav) {
             }
             Divider()
             val note = remember(tick) { Store.get(ctx).note(today) }
+            val missedToday = remember(tick) { Summaries.notes(ctx, today).count { it.kind == com.riziuzi.utho.core.CheckInKind.MISSED } }
             TodayRow(
                 done = note.mood != null,
                 partial = false,
                 title = tr("Journal", "Journal"),
-                sub = note.mood?.let { tr("Writes itself · Mood: ", "Apne aap likha jaata hai · Mood: ") + com.riziuzi.utho.core.Moods.label(it, lang) }
-                    ?: tr("Writes itself. Mood comes from what you say.", "Apne aap likha jaata hai. Mood aapki baat se aata hai."),
+                sub = when {
+                    missedToday > 0 -> tr("$missedToday missed check-in · tap to answer", "$missedToday check-in miss hua · jawaab dein")
+                    note.mood != null -> tr("Writes itself · Mood: ", "Apne aap likha jaata hai · Mood: ") + com.riziuzi.utho.core.Moods.label(note.mood, lang)
+                    else -> tr("Writes itself. Mood comes from what you say.", "Apne aap likha jaata hai. Mood aapki baat se aata hai.")
+                },
                 action = null,
                 onAction = {},
                 modifier = Modifier.clickable { nav.go(Route.Journal(today.toEpochDay())) }.testTag("journalRow"),

@@ -65,6 +65,35 @@ class Store private constructor(context: Context) {
         if (i >= 0) sessionsList[i] = sessionsList[i].copy(checkIns = sessionsList[i].checkIns + c)
     }
 
+    /** The check-in or note with this time, in a session or among the free notes. */
+    fun findCheckIn(timeMs: Long): CheckIn? = synchronized(lock) {
+        sessionsList.firstNotNullOfOrNull { s -> s.checkIns.firstOrNull { it.timeMs == timeMs } }
+            ?: freeNotesList.firstOrNull { it.timeMs == timeMs }
+    }
+
+    /** Replaces the check-in or note with this time (answering a missed one, fixing subject or mood). */
+    fun updateCheckIn(timeMs: Long, f: (CheckIn) -> CheckIn): Boolean = change {
+        var found = false
+        for (i in sessionsList.indices) {
+            val s = sessionsList[i]
+            if (s.checkIns.any { it.timeMs == timeMs }) {
+                sessionsList[i] = s.copy(checkIns = s.checkIns.map { if (it.timeMs == timeMs) f(it) else it })
+                found = true
+            }
+        }
+        val j = freeNotesList.indexOfFirst { it.timeMs == timeMs }
+        if (j >= 0) {
+            freeNotesList[j] = f(freeNotesList[j])
+            found = true
+        }
+        found
+    }
+
+    /** The latest missed check-in that still has no answer. */
+    fun latestMissed(): CheckIn? = synchronized(lock) {
+        sessionsList.flatMap { it.checkIns }.filter { it.kind == CheckInKind.MISSED }.maxByOrNull { it.timeMs }
+    }
+
     /** The user fixed a check-in's topic: save it and learn from it. */
     fun correctCheckIn(sessionId: Long, timeMs: Long, topic: String) {
         var text = ""

@@ -2,6 +2,7 @@ package com.riziuzi.utho.data
 
 import android.content.Context
 import com.riziuzi.utho.core.CheckIn
+import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.DayNote
 import com.riziuzi.utho.core.Exercise
 import com.riziuzi.utho.core.StudySession
@@ -43,11 +44,18 @@ object DemoData {
                 val subject = subjects[(back + i) % subjects.size]
                 val checkIns = (30 until minutes step 30).map { off ->
                     val text = notes[(back + i + off) % notes.size]
-                    CheckIn(start + off * 60_000L, text, subjects[(back + i + off / 30) % subjects.size])
+                    if (back == 1 && i == 0 && off == 60) {
+                        CheckIn(start + off * 60_000L, "", null, CheckInKind.MISSED) // yesterday: one unanswered pop-up
+                    } else {
+                        CheckIn(
+                            start + off * 60_000L, text, subjects[(back + i + off / 30) % subjects.size],
+                            mood = listOf(1, 0, null, 2, 3)[(back + off / 30) % 5],
+                        )
+                    }
                 }
                 store.addSessionForDemo(StudySession(start, start, start + minutes * 60_000L, subject, checkIns))
             }
-            if (back % 3 == 0) store.setNote(date, DayNote(back % 5, "Finish the next chapter tomorrow."))
+            if (back % 3 == 0) store.setNote(date, DayNote(back % 5, ""))
         }
         // Today: morning workout done and one finished block.
         val base = today.atStartOfDay(zone).toInstant().toEpochMilli()

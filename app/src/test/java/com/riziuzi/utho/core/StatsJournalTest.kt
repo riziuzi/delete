@@ -28,6 +28,28 @@ class StatsTest {
         assertEquals(null, byTopic["Polity"])
     }
 
+    @Test fun missedCheckInDropsThatStretch() {
+        // 9:00-9:30 answered, 9:30-10:00 nobody answered, 10:00-10:30 answered.
+        val s = StudySession(
+            1, at(day, 9, 0), at(day, 10, 30), "Polity",
+            listOf(
+                CheckIn(at(day, 9, 30), "polity padhi", "Polity"),
+                CheckIn(at(day, 10, 0), "", null, CheckInKind.MISSED),
+                CheckIn(at(day, 10, 30), "history padhi", "History"),
+            ),
+        )
+        val byTopic = Stats.minutesByTopic(listOf(s), day, IST, at(day, 23, 0)).toMap()
+        assertEquals(30, byTopic["Polity"])
+        assertEquals(30, byTopic["History"])
+        assertEquals(60, Stats.totalMinutes(listOf(s), day, IST, at(day, 23, 0)))
+        // The gap splits the focus block too.
+        assertEquals(30, Stats.longestBlockMinutes(listOf(s), day, IST, at(day, 23, 0)))
+        // Answering it later counts the 30 minutes again.
+        val answered = s.copy(checkIns = s.checkIns.map { if (it.kind == CheckInKind.MISSED) it.copy(text = "maths", topic = "CSAT", kind = CheckInKind.SPOKEN) else it })
+        assertEquals(90, Stats.totalMinutes(listOf(answered), day, IST, at(day, 23, 0)))
+        assertEquals(90, Stats.longestBlockMinutes(listOf(answered), day, IST, at(day, 23, 0)))
+    }
+
     @Test fun switchChangesTheNextStretch() {
         val s = StudySession(
             1, at(day, 9, 0), at(day, 10, 0), "Polity",

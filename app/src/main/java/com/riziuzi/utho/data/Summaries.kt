@@ -27,7 +27,7 @@ object Summaries {
         val to = Stats.dayEnd(date, zone)
         val daySessions = sessions.filter { it.startMs < to && (it.endMs ?: now) > from }
         val spoken = daySessions.flatMap { it.checkIns }
-            .filter { it.timeMs in from until to && it.kind == com.riziuzi.utho.core.CheckInKind.SPOKEN }
+            .filter { it.timeMs in from until to && it.kind != com.riziuzi.utho.core.CheckInKind.SWITCH }
         val free = store.freeNotes.filter { it.timeMs in from until to }
         val checkIns: List<CheckIn> = (spoken + free).filter { it.text.isNotBlank() }
         return DaySummary(
@@ -78,6 +78,18 @@ object Summaries {
             .map { it.key to (it.value / 60_000L).toInt() }
             .filter { it.second > 0 }
             .sortedByDescending { it.second }
+    }
+
+    /** The day's notes for the journal: answered and missed check-ins plus notes spoken or typed outside a session. */
+    fun notes(ctx: Context, date: LocalDate): List<CheckIn> {
+        val store = Store.get(ctx)
+        val from = Stats.dayStart(date, zone)
+        val to = Stats.dayEnd(date, zone)
+        val inSessions = store.sessions.flatMap { it.checkIns }.filter {
+            it.timeMs in from until to && (it.kind == com.riziuzi.utho.core.CheckInKind.MISSED || it.text.isNotBlank())
+        }
+        val free = store.freeNotes.filter { it.timeMs in from until to }
+        return (inSessions + free).sortedBy { it.timeMs }
     }
 
     fun classifier(ctx: Context): TopicClassifier = TopicClassifier(Prefs(ctx).subjects, Store.get(ctx).examples)

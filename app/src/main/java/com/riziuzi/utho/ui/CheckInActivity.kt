@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
@@ -55,21 +58,26 @@ import com.riziuzi.utho.alarm.AlarmService
 import com.riziuzi.utho.alarm.Beeper
 import com.riziuzi.utho.alarm.Notifications
 import com.riziuzi.utho.core.CheckIn
+import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.Hinglish
+import com.riziuzi.utho.core.JournalWriter
 import com.riziuzi.utho.core.Moods
-import com.riziuzi.utho.core.Punctuator
 import com.riziuzi.utho.core.StudySession
 import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
 import com.riziuzi.utho.data.Summaries
 import com.riziuzi.utho.voice.VoiceRecognizer
 import kotlinx.coroutines.delay
-import java.time.LocalDate
+import java.time.Instant
 
 /**
- * The voice check-in. Pops up every N minutes while studying (also over the lock screen), or when the
- * user taps Speak. Listens up to 15 seconds, writes what was said in Hinglish, and picks the subject
- * and the mood by itself. Closes on its own; if nothing was said it records "not selected / not said".
+ * Voice (or typed) study notes. Three ways in:
+ *  - TIMED: the every-30-minutes pop-up, also over the lock screen. Listens 15 s. If nothing is said the
+ *    check-in stays "missed" (that half hour isn't counted) and a notification lets you answer later.
+ *  - NOTE: Speak / Type from the home screen or journal. No time limit; stop with Done.
+ *  - ANSWER: a missed check-in opened later from its notification or the journal. Like NOTE, and the
+ *    answer fills in that check-in so its half hour counts.
+ * The text is written in Hinglish; subject and mood are picked automatically and can be fixed with a tap.
  */
 class CheckInActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,47 +86,86 @@ class CheckInActivity : ComponentActivity() {
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         Notifications.cancel(this, Notifications.ID_CHECKIN)
-        val session = Store.get(this).activeSession()
-        val manual = intent.getBooleanExtra(EXTRA_MANUAL, false)
-        if (session == null && !manual) {
+        val store = Store.get(this)
+        val session = store.activeSession()
+        val now = System.currentTimeMillis()
+        var mode = Mode.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_MODE) } ?: Mode.TIMED
+        var target = intent.getLongExtra(EXTRA_TIME, -1L).takeIf { it > 0 }?.let { store.findCheckIn(it) }
+        if (target != null && target.kind != CheckInKind.MISSED) target = null // already answered
+        // A timed pop-up opened late from the notification tray: answer it without the 15 s limit.
+        if (mode == Mode.TIMED && target != null && now - target.timeMs > LATE_MS) mode = Mode.ANSWER
+        if (mode == Mode.ANSWER && target == null) mode = Mode.NOTE
+        if (mode == Mode.TIMED && session == null && target == null) {
             finish()
             return
         }
+        if (target != null) Notifications.cancel(this, Notifications.ID_MISSED)
+        val typeFirst = intent.getBooleanExtra(EXTRA_TYPE, false)
         val prefs = Prefs(this)
         setContent {
             UthoTheme(prefs.theme, prefs.lang) {
-                VoiceCheckIn(session, prefs.checkInMin, prefs.beepVolume) { finish() }
+                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin, prefs.beepVolume) { finish() }
             }
         }
     }
 
-    companion object {
-        const val EXTRA_MANUAL = "manual"
-        const val LISTEN_SECONDS = 15
+    enum class Mode { TIMED, NOTE, ANSWER }
 
-        fun manualIntent(ctx: Context): Intent = Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MANUAL, true)
+    companion object {
+        const val EXTRA_MODE = "mode"
+        const val EXTRA_TIME = "time"
+        const val EXTRA_TYPE = "type"
+        const val LISTEN_SECONDS = 15
+        private const val LATE_MS = 2 * 60_000L
+
+        /** Speak (or type) a note now: home screen, journal, study screen. */
+        fun noteIntent(ctx: Context, type: Boolean = false): Intent =
+            Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.NOTE.name).putExtra(EXTRA_TYPE, type)
+
+        /** The timed pop-up for the check-in saved at [timeMs]. */
+        fun timedIntent(ctx: Context, timeMs: Long): Intent =
+            Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.TIMED.name).putExtra(EXTRA_TIME, timeMs)
+
+        /** Answer the missed check-in saved at [timeMs]. */
+        fun answerIntent(ctx: Context, timeMs: Long, type: Boolean = false): Intent =
+            Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.ANSWER.name).putExtra(EXTRA_TIME, timeMs).putExtra(EXTRA_TYPE, type)
     }
 }
 
-private enum class Stage { LISTENING, RESULT }
+private enum class Stage { LISTENING, TYPING, RESULT, MISSED }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun VoiceCheckIn(session: StudySession?, interval: Int, beepVolume: Int, onDone: () -> Unit) {
+private fun CheckInScreen(
+    mode: CheckInActivity.Mode,
+    session: StudySession?,
+    target: CheckIn?,
+    typeFirst: Boolean,
+    interval: Int,
+    beepVolume: Int,
+    onDone: () -> Unit,
+) {
     val ctx = LocalContext.current
     val lang = LocalLang.current
     val prefs = remember { Prefs(ctx) }
     val store = remember { Store.get(ctx) }
+    val timed = mode == CheckInActivity.Mode.TIMED
     val subjects = remember { prefs.subjects.ifEmpty { listOfNotNull(session?.subject) } }
-    val startedAt = remember { System.currentTimeMillis() }
+    val startedAt = remember { target?.timeMs ?: System.currentTimeMillis() }
 
-    var stage by remember { mutableStateOf(Stage.LISTENING) }
+    var stage by remember { mutableStateOf(if (typeFirst) Stage.TYPING else Stage.LISTENING) }
+    var round by remember { mutableIntStateOf(0) }
+    var ready by remember { mutableStateOf(false) }
     var secondsLeft by remember { mutableIntStateOf(CheckInActivity.LISTEN_SECONDS) }
+    var elapsedSec by remember { mutableIntStateOf(0) }
     val raw = remember { mutableStateListOf<String>() }
     var partial by remember { mutableStateOf("") }
     var level by remember { mutableFloatStateOf(0f) }
     var lastSpeech by remember { mutableLongStateOf(0L) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var typed by remember { mutableStateOf("") }
+    var typeHint by remember { mutableStateOf<String?>(null) }
+    var stopping by remember { mutableStateOf(false) }
 
     var text by remember { mutableStateOf("") }
     var guessedTopic by remember { mutableStateOf<String?>(null) }
@@ -129,35 +176,64 @@ private fun VoiceCheckIn(session: StudySession?, interval: Int, beepVolume: Int,
     var saved by remember { mutableStateOf(false) }
 
     val micOk = remember { ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
+    val beeper = remember { Beeper(beepVolume) }
 
     fun save() {
         if (saved) return
         saved = true
         val chosen = topic
         val corrected = chosen != guessedTopic
-        val c = CheckIn(startedAt, text, chosen, corrected = corrected, mood = mood)
-        if (session != null) store.addCheckIn(session.id, c) else store.addFreeNote(c)
-        mood?.let { store.setDayMood(LocalDate.now(Summaries.zone), it) }
+        val c = CheckIn(startedAt, text, chosen, CheckInKind.SPOKEN, corrected = corrected, mood = mood)
+        when {
+            target != null -> store.updateCheckIn(target.timeMs) { c }
+            session != null && timed -> store.addCheckIn(session.id, c)
+            session != null -> store.addCheckIn(session.id, c.copy(timeMs = System.currentTimeMillis()))
+            else -> store.addFreeNote(c)
+        }
+        mood?.let { store.setDayMood(Instant.ofEpochMilli(startedAt).atZone(Summaries.zone).toLocalDate(), it) }
         if (corrected && chosen != null && text.isNotBlank()) store.learn(chosen, text)
         onDone()
     }
 
-    /** Turn what was heard into Hinglish text, a subject and a mood. */
-    fun analyse() {
-        val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
-        val original = heard.joinToString(" ")
-        text = Punctuator.paragraph(heard.map { Hinglish.convert(it) })
-        val found = if (text.isBlank()) null else Summaries.classifier(ctx).classify("$original $text").best
+    /** Hinglish text, subject and mood from what was said or typed. */
+    fun analyse(original: String, written: String) {
+        text = written
+        val found = Summaries.classifier(ctx).classify("$original $written").best
         guessedTopic = found
         topic = found
-        mood = if (text.isBlank()) null else Moods.detect(text) ?: Moods.detect(original)
-        closeIn = if (text.isBlank()) 3 else 5
-        closeAt = System.currentTimeMillis() + closeIn * 1000L
+        mood = Moods.detect(written) ?: Moods.detect(original)
+        closeIn = 5
+        closeAt = System.currentTimeMillis() + 5000
         stage = Stage.RESULT
+    }
+
+    /** Nobody answered the timed pop-up: keep it as missed and offer to answer later. */
+    fun missed() {
+        if (stage == Stage.MISSED) return
+        stage = Stage.MISSED
+        val t = target?.timeMs ?: startedAt
+        if (target == null && session != null) store.addCheckIn(session.id, CheckIn(t, "", null, CheckInKind.MISSED))
+        Notifications.showMissed(ctx, t)
+    }
+
+    fun afterListening() {
+        val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
+        when {
+            heard.isNotEmpty() -> analyse(heard.joinToString(" "), Hinglish.note(heard))
+            timed -> missed()
+            else -> {
+                typeHint = problem ?: lang.t2("Didn't catch anything. Type it, or tap Speak to try again.", "Kuch sunai nahi diya. Type karein, ya Bolein dabakar phir try karein.")
+                stage = Stage.TYPING
+            }
+        }
     }
 
     val recognizer = remember {
         VoiceRecognizer(ctx, prefs.voiceLang, object : VoiceRecognizer.Listener {
+            override fun onListening() {
+                setReady()
+                beeper.chime()
+            }
             override fun onPartial(text: String) {
                 partial = text
                 lastSpeech = System.currentTimeMillis()
@@ -167,17 +243,16 @@ private fun VoiceCheckIn(session: StudySession?, interval: Int, beepVolume: Int,
                 partial = ""
                 lastSpeech = System.currentTimeMillis()
             }
-            override fun onLevel(level: Float) {
-                setLevel(level)
-            }
-            override fun onProblem(problem: VoiceRecognizer.Problem, code: Int) {
-                setProblem(problemText(problem, lang))
-            }
+            override fun onLevel(level: Float) = setLevel(level)
+            override fun onProblem(problem: VoiceRecognizer.Problem, code: Int) = setProblem(problemText(problem, lang))
             override fun onFinished() {
-                // After a problem, keep the message on screen; the 15 s timer (or Done) moves on.
-                if (stage == Stage.LISTENING && problem == null) analyse()
+                // After a problem the message stays up; the timer (timed) or Done (note) moves on.
+                if (stage == Stage.LISTENING && (problem == null || stopping)) afterListening()
             }
 
+            private fun setReady() {
+                ready = true
+            }
             private fun setLevel(v: Float) {
                 level = v
             }
@@ -187,47 +262,84 @@ private fun VoiceCheckIn(session: StudySession?, interval: Int, beepVolume: Int,
         })
     }
 
+    fun stopListening() {
+        stopping = true
+        if (micOk && problem == null) recognizer.stop() else afterListening()
+    }
+
+    fun listenAgain() {
+        raw.clear()
+        partial = ""
+        problem = null
+        ready = false
+        typeHint = null
+        stopping = false
+        stage = Stage.LISTENING
+        round++
+    }
+
     DisposableEffect(Unit) {
-        val beeper = Beeper(beepVolume)
-        beeper.chime()
-        if (micOk) {
-            recognizer.start()
-        } else {
-            problem = lang.t2(
-                "Microphone permission is off. Open Utho once and allow the microphone.",
-                "Mic ki permission band hai. Utho kholkar mic allow karein.",
-            )
-        }
         onDispose {
             recognizer.destroy()
             beeper.release()
         }
     }
 
-    // Listen up to 15 seconds; stop early 2.5 s after the user stops talking.
-    LaunchedEffect(Unit) {
-        while (stage == Stage.LISTENING && secondsLeft > 0) {
-            delay(250)
-            val elapsed = ((System.currentTimeMillis() - startedAt) / 1000).toInt()
-            secondsLeft = (CheckInActivity.LISTEN_SECONDS - elapsed).coerceAtLeast(0)
-            val paused = raw.isNotEmpty() && partial.isBlank() && System.currentTimeMillis() - lastSpeech > 2500
-            if (paused) break
+    // One listening round: wait for the mic to open, then 15 s (timed) or until Done (note, max 3 min).
+    LaunchedEffect(round, stage == Stage.LISTENING) {
+        if (stage != Stage.LISTENING) return@LaunchedEffect
+        if (micOk) {
+            recognizer.start()
+        } else {
+            problem = lang.t2("Microphone permission is off. Open Utho once and allow the microphone.", "Mic ki permission band hai. Utho kholkar mic allow karein.")
         }
-        if (stage == Stage.LISTENING) {
-            if (micOk && problem == null) recognizer.stop() else analyse()
+        val readyBy = System.currentTimeMillis() + 5000
+        while (!ready && problem == null && System.currentTimeMillis() < readyBy) delay(100)
+        val from = System.currentTimeMillis()
+        while (stage == Stage.LISTENING) {
+            delay(200)
+            val elapsed = System.currentTimeMillis() - from
+            elapsedSec = (elapsed / 1000).toInt()
+            if (timed) {
+                secondsLeft = (CheckInActivity.LISTEN_SECONDS - elapsedSec).coerceAtLeast(0)
+                val paused = raw.isNotEmpty() && partial.isBlank() && System.currentTimeMillis() - lastSpeech > 2500
+                if (secondsLeft == 0 || paused) break
+            } else if (elapsed > 3 * 60_000L) {
+                break
+            }
+        }
+        if (stage == Stage.LISTENING) stopListening()
+    }
+
+    // Timed result: save and close by itself (counts wall time). Notes wait for Save.
+    LaunchedEffect(stage) {
+        when (stage) {
+            Stage.RESULT -> if (timed) {
+                while (!saved) {
+                    val left = closeAt - System.currentTimeMillis()
+                    if (left <= 0) break
+                    closeIn = ((left + 999) / 1000).toInt()
+                    delay(200)
+                }
+                save()
+            }
+            Stage.MISSED -> {
+                val until = System.currentTimeMillis() + 3000
+                while (System.currentTimeMillis() < until) delay(200)
+                onDone()
+            }
+            else -> {}
         }
     }
 
-    // Show the result briefly, then save and close by itself.
-    LaunchedEffect(stage) {
-        if (stage != Stage.RESULT) return@LaunchedEffect
-        while (!saved) {
-            val left = closeAt - System.currentTimeMillis()
-            if (left <= 0) break
-            closeIn = ((left + 999) / 1000).toInt()
-            delay(200)
+    val question = when {
+        target != null && interval > 0 -> {
+            val a = JournalWriter.clock(target.timeMs - interval * 60_000L, Summaries.zone, lang)
+            val b = JournalWriter.clock(target.timeMs, Summaries.zone, lang)
+            tr("What did you study from $a to $b?", "$a se $b tak kya padha?")
         }
-        save()
+        timed && interval > 0 -> tr("What did you study in the last $interval min? How's your mood?", "Pichhle $interval min mein kya padha? Mood kaisa hai?")
+        else -> tr("What did you study? How's your mood?", "Kya padha? Mood kaisa hai?")
     }
 
     Column(
@@ -236,66 +348,121 @@ private fun VoiceCheckIn(session: StudySession?, interval: Int, beepVolume: Int,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Quick check-in", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-        if (stage == Stage.LISTENING) {
-            Text(
-                if (session != null && interval > 0) {
-                    tr("What did you study in the last $interval min? How's your mood?", "Pichhle $interval min mein kya padha? Mood kaisa hai?")
-                } else {
-                    tr("What did you study? How's your mood?", "Kya padha? Mood kaisa hai?")
-                },
-                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-            )
-            Muted(tr("e.g. \"Polity, fundamental rights. Feeling good.\"", "jaise: \"Polity ke fundamental rights padhe, mood accha hai\""), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(4.dp))
-            Ring(secondsLeft / CheckInActivity.LISTEN_SECONDS.toFloat(), level, "$secondsLeft")
-            val live = (raw + listOf(partial)).filter { it.isNotBlank() }.joinToString(" ") { Hinglish.convert(it) }
-            Text(
-                live.ifBlank { tr("Listening… Hindi or English", "Sun rahe hain… Hindi ya English mein bolein") },
-                fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().testTag("checkInLive"),
-            )
-            problem?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
-            ButtonsRow {
-                SecondButton("Skip", { onDone() }, Modifier.weight(1f))
-                BigButton(tr("Done", "Ho gaya"), {
-                    if (micOk && problem == null) recognizer.stop() else analyse()
-                }, Modifier.weight(1f).testTag("checkInDone"))
+        Text(
+            when {
+                target != null -> tr("Missed check-in", "Missed check-in")
+                timed -> tr("Quick check-in", "Quick check-in")
+                else -> tr("Study note", "Study note")
+            },
+            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+        )
+        when (stage) {
+            Stage.LISTENING -> {
+                Text(question, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Muted(tr("e.g. \"Polity, fundamental rights. Feeling good.\"", "jaise: \"Polity ke fundamental rights padhe, mood accha hai\""), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                val label = when {
+                    !ready && problem == null -> "…"
+                    timed -> "$secondsLeft"
+                    else -> "%d:%02d".format(elapsedSec / 60, elapsedSec % 60)
+                }
+                Ring(if (timed) secondsLeft / CheckInActivity.LISTEN_SECONDS.toFloat() else 1f, level, label)
+                val live = (raw + listOf(partial)).filter { it.isNotBlank() }.joinToString(" ") { Hinglish.convert(it) }
+                Text(
+                    live.ifBlank {
+                        if (ready) tr("Listening… speak now", "Sun rahe hain… ab bolein") else tr("Getting the mic ready…", "Mic ready ho raha hai…")
+                    },
+                    fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().testTag("checkInLive"),
+                )
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
+                ButtonsRow {
+                    if (timed) {
+                        SecondButton(tr("Skip", "Skip"), { missed() }, Modifier.weight(1f))
+                    } else {
+                        SecondButton(tr("Type", "Type"), {
+                            recognizer.destroy()
+                            val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
+                            typed = if (heard.isEmpty()) "" else Hinglish.note(heard)
+                            stage = Stage.TYPING
+                        }, Modifier.weight(1f).testTag("checkInTypeInstead"))
+                    }
+                    BigButton(tr("Done", "Ho gaya"), { stopListening() }, Modifier.weight(1f).testTag("checkInDone"))
+                }
+                if (!timed) SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
             }
-        } else {
-            if (text.isBlank()) {
-                Text(tr("No answer", "Koi jawaab nahi"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            } else {
+
+            Stage.TYPING -> {
+                Text(question, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                typeHint?.let { Muted(it, textAlign = TextAlign.Center) }
+                val focus = remember { FocusRequester() }
+                OutlinedTextField(
+                    value = typed, onValueChange = { typed = it }, minLines = 3,
+                    placeholder = { Text("Polity ke fundamental rights padhe, mood accha hai") },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("checkInType"),
+                )
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                ButtonsRow {
+                    SecondButton(tr("Speak", "Bolein"), { listenAgain() }, Modifier.weight(1f))
+                    BigButton(tr("Next", "Aage"), {
+                        if (typed.isNotBlank()) analyse(typed, Hinglish.note(listOf(typed)))
+                    }, Modifier.weight(1f).testTag("checkInNext"), enabled = typed.isNotBlank())
+                }
+                SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
+            }
+
+            Stage.RESULT -> {
                 Text(text, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.testTag("checkInText"))
-            }
-            problem?.let { Muted(it, textAlign = TextAlign.Center) }
-            CardBox {
-                Text(
-                    "Subject: " + (topic ?: tr("not selected", "select nahi hua")),
-                    fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("checkInSubject"),
-                )
-                Text(
-                    "Mood: " + (mood?.let { Moods.label(it, lang) } ?: tr("not said", "nahi bataya")),
-                    fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("checkInMood"),
-                )
-            }
-            Muted(tr("Wrong? Tap to fix.", "Galat hai? Tap karke theek karein."))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                subjects.forEach { s ->
-                    OptionTile(s, s == topic, {
-                        topic = if (topic == s) null else s
-                        closeAt = System.currentTimeMillis() + 4000
-                    }, minHeight = 44.dp)
+                CardBox {
+                    Text(
+                        "Subject: " + (topic ?: tr("not selected", "select nahi hua")),
+                        fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("checkInSubject"),
+                    )
+                    Text(
+                        "Mood: " + (mood?.let { Moods.label(it, lang) } ?: tr("not said", "nahi bataya")),
+                        fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("checkInMood"),
+                    )
+                }
+                Muted(tr("Wrong? Tap to fix.", "Galat hai? Tap karke theek karein."))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    subjects.forEach { s ->
+                        OptionTile(s, s == topic, {
+                            topic = if (topic == s) null else s
+                            closeAt = System.currentTimeMillis() + 5000
+                        }, minHeight = 44.dp)
+                    }
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (0..4).forEach { m ->
+                        OptionTile(Moods.label(m, lang), m == mood, {
+                            mood = if (mood == m) null else m
+                            closeAt = System.currentTimeMillis() + 5000
+                        }, minHeight = 44.dp)
+                    }
+                }
+                if (timed) {
+                    BigButton("Save ($closeIn)", { save() }, Modifier.testTag("checkInSave"))
+                } else {
+                    ButtonsRow {
+                        SecondButton(tr("Speak again", "Phir bolein"), { listenAgain() }, Modifier.weight(1f))
+                        BigButton("Save", { save() }, Modifier.weight(1f).testTag("checkInSave"))
+                    }
                 }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                (0..4).forEach { m ->
-                    OptionTile(Moods.label(m, lang), m == mood, {
-                        mood = if (mood == m) null else m
-                        closeAt = System.currentTimeMillis() + 4000
-                    }, minHeight = 44.dp)
+
+            Stage.MISSED -> {
+                Text(tr("Nothing heard", "Kuch sunai nahi diya"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                CardBox {
+                    Text("Subject: " + tr("not selected", "select nahi hua"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Mood: " + tr("not said", "nahi bataya"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
+                Muted(
+                    tr(
+                        "This half hour won't count until you answer. Tap the notification to speak or type it later.",
+                        "Jab tak jawaab nahi denge, yeh aadha ghanta count nahi hoga. Baad mein notification par tap karke bolein ya likhein.",
+                    ),
+                    textAlign = TextAlign.Center,
+                )
             }
-            BigButton("Save ($closeIn)", { save() }, Modifier.testTag("checkInSave"))
         }
     }
 }
@@ -311,7 +478,7 @@ private fun Ring(fraction: Float, level: Float, label: String) {
             drawArc(cs.primary, -90f, 360f * fraction, false, Offset(inset, inset), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke, cap = StrokeCap.Round))
             drawCircle(cs.primaryContainer, radius = size.minDimension * (0.25f + 0.12f * level), center = center)
         }
-        Text(label, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = if (label.length > 3) 34.sp else 44.sp, fontWeight = FontWeight.Bold)
     }
 }
 

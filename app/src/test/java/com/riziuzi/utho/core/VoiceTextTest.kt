@@ -31,6 +31,12 @@ class HinglishTest {
 
     @Test fun nuktaVariantsMatch() = assertEquals(h("न्यूज़पेपर"), h("न्यूजपेपर"))
 
+    @Test fun longOrShortVowelSpellingsBothFound() = assertEquals("kuch", h("कूछ"))
+
+    /** What happened on the phone: one sentence came back in four pieces. */
+    @Test fun piecesBecomeOneSentence() =
+        assertEquals("Maths padh liya aur sab kuch ho gaya hai.", Hinglish.note(listOf("मैथ्स पढ़", "लिया", "और सब कुछ", " ", "हो गया है")))
+
     @Test fun latinTextIsUntouched() = assertEquals("Read Laxmikanth today", h("Read Laxmikanth today"))
 }
 
@@ -117,4 +123,21 @@ class SpokenTopicTest {
     }
 
     @Test fun typedHinglish() = assertEquals("Polity", best("aaj samvidhan ke fundamental rights padhe"))
+}
+
+/** The UPSC list has no "Maths": maths talk belongs to CSAT. Lists that do have Maths keep it there. */
+class SubjectListTest {
+    private val upsc = TopicClassifier(listOf("Polity", "History", "Geography", "Economy", "Environment", "Science & Tech", "Ethics", "Essay", "CSAT", "Current affairs"))
+    private val ssc = TopicClassifier(listOf("Maths", "Reasoning", "English", "General awareness"))
+    private fun best(c: TopicClassifier, spoken: String) = c.classify("$spoken ${Hinglish.convert(spoken)}").best
+
+    @Test fun mathsIsCsatForUpsc() {
+        assertEquals("CSAT", best(upsc, "मैथ्स पढ़ लिया"))
+        assertEquals("CSAT", best(upsc, "percentage aur profit loss ke sawal kiye"))
+    }
+
+    @Test fun mathsStaysMathsWhenItIsASubject() {
+        assertEquals("Maths", best(ssc, "मैथ्स पढ़ लिया"))
+        assertEquals("Reasoning", best(ssc, "reasoning ke puzzle kiye"))
+    }
 }

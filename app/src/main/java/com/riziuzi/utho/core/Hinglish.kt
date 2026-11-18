@@ -71,7 +71,8 @@ object Hinglish {
         "रिवाइज़" to "revise", "प्रैक्टिकल" to "practical", "सब्जेक्ट" to "subject", "सब्जेक्ट्स" to "subjects",
     )
 
-    private fun norm(w: String) = w.replace('ँ', 'ं').replace("\u093C", "")
+    /** Lookup key that ignores nukta, chandrabindu and long/short i and u (recognisers vary: कुछ / कूछ). */
+    private fun norm(w: String) = w.replace('ँ', 'ं').replace("\u093C", "").replace('ी', 'ि').replace('ू', 'ु')
     private val lookup: Map<String, String> = buildMap {
         loanwords.forEach { (k, v) -> put(norm(k), v) }
         words.forEach { (k, v) -> put(norm(k), v) }
@@ -194,6 +195,13 @@ object Hinglish {
         }
         return sb.toString().replace("chchh", "cch")
     }
+
+    /**
+     * One note from everything heard. The recogniser cuts at every pause ("maths padh" / "liya"), so the pieces
+     * are joined and punctuated as one sentence instead of one sentence per piece.
+     */
+    fun note(pieces: List<String>): String =
+        Punctuator.sentence(convert(pieces.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ")))
 
     /** Converts every Devanagari word; Latin words and punctuation pass through. */
     fun convert(text: String): String {

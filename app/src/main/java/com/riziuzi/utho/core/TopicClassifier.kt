@@ -215,6 +215,15 @@ class TopicClassifier(
                     "series", "श्रृंखला", "coding decoding", "direction", "दिशा", "seating arrangement", "data interpretation",
                 ),
             ),
+            // UPSC CSAT is where maths lives, so maths talk counts as CSAT when "Maths" isn't one of the subjects.
+            // Kept apart from the reasoning entry so a "Reasoning" subject doesn't pick up maths words.
+            Lexicon(
+                aliases = listOf("csat", "सीसैट", "सी सैट", "सीसेट"),
+                keywords = listOf(
+                    "maths", "math", "mathematics", "मैथ्स", "मैथ", "गणित", "ganit", "quant", "aptitude", "एप्टीट्यूड",
+                    "percentage", "profit", "ratio", "average", "probability", "number system", "time and work", "time and distance",
+                ),
+            ),
             Lexicon(
                 aliases = listOf("english", "अंग्रेजी", "angrezi", "english language"),
                 keywords = listOf("grammar", "vocabulary", "tense", "idiom", "synonym", "antonym", "comprehension", "cloze", "error spotting"),

@@ -12,7 +12,11 @@ fun Lang.t(en: String, hi: String): String = if (this == Lang.HI) hi else en
  * SPOKEN: what the user said they studied since the previous note (tags that past stretch of time).
  * SWITCH: the user changed subject now (the next stretch of time gets [topic]).
  */
-enum class CheckInKind { SPOKEN, SWITCH }
+/**
+ * SPOKEN: an answered check-in or a voice/typed note. SWITCH: the user changed subject.
+ * MISSED: a timed check-in nobody answered; the stretch before it doesn't count as study until it is answered.
+ */
+enum class CheckInKind { SPOKEN, SWITCH, MISSED }
 
 data class CheckIn(
     val timeMs: Long,

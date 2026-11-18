@@ -1,45 +1,49 @@
 package com.riziuzi.utho.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.riziuzi.utho.core.DayNote
+import com.riziuzi.utho.core.CheckInKind
 import com.riziuzi.utho.core.JournalWriter
 import com.riziuzi.utho.core.Lang
 import com.riziuzi.utho.core.Moods
+import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
 import com.riziuzi.utho.data.Summaries
 import com.riziuzi.utho.voice.VoiceRecognizer
 import java.time.DayOfWeek
 import java.time.LocalDate
 
+/**
+ * A day at a glance: a short summary the app writes, then the study notes as one line each
+ * (time, subject, mood; tap a line to read it), then the day's mood.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun JournalScreen(nav: Nav, date: LocalDate) {
@@ -47,49 +51,68 @@ fun JournalScreen(nav: Nav, date: LocalDate) {
     val tick = rememberTick()
     val appLang = LocalLang.current
     val store = remember { Store.get(ctx) }
+    val prefs = remember { Prefs(ctx) }
     var viewLang by remember { mutableStateOf(appLang) }
     val summary = remember(tick, date) { Summaries.day(ctx, date) }
+    val notes = remember(tick, date) { Summaries.notes(ctx, date) }
+    val subjects = remember(tick) { prefs.subjects }
     val saved = remember(tick, date) { store.note(date) }
-    var typing by remember { mutableStateOf(false) }
-    var note by remember(date) { mutableStateOf(saved.note) }
     val isToday = date == LocalDate.now(Summaries.zone)
 
     ScreenScaffold(
-        title = date.format(dateFormatter(appLang, "EEEE, d MMM")),
+        title = date.format(dateFormatter(appLang, "EEE, d MMM")),
         onBack = { nav.back() },
         actions = {
             Segmented(listOf(Lang.EN to "EN", Lang.HI to "Hinglish"), viewLang, { viewLang = it }, Modifier.width(150.dp).testTag("journalLang"))
         },
     ) {
-        CardBox {
-            Text(
-                viewLang.t2("Written automatically", "App ne apne aap likha"),
-                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
-            )
-            JournalWriter.write(summary, Summaries.zone, viewLang).forEach { p ->
-                val isHeading = p.endsWith(":") && !p.contains("·")
-                Text(p, fontSize = 16.sp, lineHeight = 25.sp, fontWeight = if (isHeading) FontWeight.SemiBold else FontWeight.Normal)
-            }
-            if (saved.note.isNotBlank()) {
-                Text(tr("Your note: ", "Aapka note: ") + saved.note, fontSize = 16.sp, lineHeight = 25.sp)
-            }
+        // ---- the day in a few lines (notes are listed below, so they're left out here)
+        val overview = JournalWriter.write(summary.copy(checkIns = emptyList(), checkInsAsked = 0), Summaries.zone, viewLang)
+        CardBox(modifier = Modifier.testTag("daySummary")) {
+            Text(viewLang.t2("Summary", "Summary"), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            overview.forEach { Text(it, fontSize = 16.sp, lineHeight = 24.sp) }
         }
 
+        // ---- notes: time · subject · mood, tap to read
+        val missed = notes.count { it.kind == CheckInKind.MISSED }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(tr("Study notes", "Padhai ke notes"), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            if (notes.isNotEmpty()) Muted(tr("Tap a line to read it", "Padhne ke liye line par tap karein"))
+        }
+        NotesList(
+            notes, subjects,
+            if (isToday) tr("No notes yet. Tap Speak and say what you studied.", "Abhi koi note nahi. Bolein dabakar bataiye kya padha.")
+            else tr("No notes on this day.", "Is din koi note nahi."),
+        )
+        if (missed > 0) {
+            Muted(
+                tr(
+                    "Missed check-ins don't count as study time until you answer them.",
+                    "Missed check-in ka jawaab dene tak woh time padhai mein count nahi hota.",
+                ),
+            )
+        }
         if (isToday) {
-            CardBox(onClick = { ctx.startActivity(CheckInActivity.manualIntent(ctx)) }, modifier = Modifier.testTag("micButton")) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box(Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(tr("Speak a note", "Bolkar note karein"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Muted(tr("Say what you studied and how you feel. Subject and mood are picked for you.", "Bataiye kya padha aur mood kaisa hai. Subject aur mood apne aap select honge."))
-                    }
+            ButtonsRow {
+                Button(
+                    onClick = { ctx.startActivity(CheckInActivity.noteIntent(ctx)) },
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("micButton"), shape = RoundedCornerShape(16.dp),
+                ) {
+                    Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("  " + tr("Speak", "Bolein"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = { ctx.startActivity(CheckInActivity.noteIntent(ctx, type = true)) },
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("typeButton"), shape = RoundedCornerShape(16.dp),
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("  " + tr("Type", "Type"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        Text(tr("Mood", "Mood"), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        // ---- the day's mood: picked from what you said, or tap one
+        Text(tr("Mood of the day", "Aaj ka mood"), fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             (0..4).forEach { i ->
                 OptionTile(Moods.label(i, appLang), saved.mood == i, {
@@ -97,22 +120,12 @@ fun JournalScreen(nav: Nav, date: LocalDate) {
                 }, minHeight = 44.dp, modifier = Modifier.testTag("mood-$i"))
             }
         }
-        if (saved.mood == null) Muted(tr("Picked automatically when you mention it in a voice note.", "Voice note mein bataenge to apne aap select hoga."))
-
-        if (typing) {
-            OutlinedTextField(
-                value = note, onValueChange = { note = it }, minLines = 3,
-                modifier = Modifier.fillMaxWidth(), label = { Text(tr("Your note", "Aapka note")) },
-            )
-            ButtonsRow {
-                SecondButton(tr("Cancel", "Cancel"), { typing = false }, Modifier.weight(1f))
-                BigButton(tr("Save", "Save"), {
-                    store.setNote(date, DayNote(store.note(date).mood, note.trim()))
-                    typing = false
-                }, Modifier.weight(1f))
-            }
-        } else {
-            SmallTextButton(tr("Type a note instead", "Type karke note likhein")) { typing = true }
+        Muted(
+            if (saved.mood == null) tr("Picked by itself when you say how you feel.", "Mood bolenge to apne aap select hoga.")
+            else tr("Tap to change.", "Badalne ke liye tap karein."),
+        )
+        if (saved.note.isNotBlank()) {
+            CardBox { Text(tr("Note: ", "Note: ") + saved.note, fontSize = 15.sp) }
         }
 
         if (date.dayOfWeek == DayOfWeek.SUNDAY) {

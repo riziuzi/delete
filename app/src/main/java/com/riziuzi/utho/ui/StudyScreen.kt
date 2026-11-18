@@ -47,7 +47,6 @@ fun StudyScreen(nav: Nav) {
     }
     var pickNew by remember { mutableStateOf(false) }
     var switchTopic by remember { mutableStateOf(false) }
-    var fixing by remember { mutableStateOf<CheckIn?>(null) }
 
     ScreenScaffold(title = tr("Study session", "Padhai session"), onBack = { nav.back() }) {
         if (session == null) {
@@ -55,7 +54,7 @@ fun StudyScreen(nav: Nav) {
             BigButton(tr("Start studying", "Padhai shuru karein"), { pickNew = true })
             return@ScreenScaffold
         }
-        val current = session.checkIns.lastOrNull()?.topic ?: session.subject
+        val current = session.checkIns.lastOrNull { it.topic != null }?.topic ?: session.subject
         CardBox {
             Text(
                 formatElapsed(now - session.startMs), fontSize = 52.sp, fontWeight = FontWeight.Bold,
@@ -80,33 +79,25 @@ fun StudyScreen(nav: Nav) {
                 }
                 Muted(
                     tr(
-                        "The screen wakes up and listens for 15 seconds. Just say what you studied.",
-                        "Screen jagegi aur 15 second sunegi. Bas bataiye kya padha.",
+                        "A pop-up listens for 15 seconds. No answer: that half hour isn't counted until you answer it.",
+                        "Pop-up 15 second sunega. Jawaab nahi diya to woh aadha ghanta tab tak count nahi hoga jab tak jawaab na dein.",
                     ),
                 )
             } else {
                 Text(tr("Voice check-ins are off", "Voice check-ins off hain"), fontWeight = FontWeight.SemiBold)
                 Muted(tr("Turn them on in Settings.", "Settings mein on karein."))
             }
-            SecondButton(tr("Check in now", "Abhi check-in karein"), {
-                ctx.startActivity(Intent(ctx, CheckInActivity::class.java).putExtra(CheckInActivity.EXTRA_MANUAL, true))
+            SecondButton(tr("Speak a note now", "Abhi note bolein"), {
+                ctx.startActivity(CheckInActivity.noteIntent(ctx))
             })
         }
 
-        if (session.checkIns.any { it.kind == CheckInKind.SPOKEN }) {
+        val notes = session.checkIns
+            .filter { it.kind == CheckInKind.MISSED || (it.kind == CheckInKind.SPOKEN && it.text.isNotBlank()) }
+            .sortedByDescending { it.timeMs }
+        if (notes.isNotEmpty()) {
             SectionLabel(tr("Check-ins", "Check-ins"))
-            CardBox {
-                session.checkIns.filter { it.kind == CheckInKind.SPOKEN }.sortedByDescending { it.timeMs }.forEachIndexed { i, c ->
-                    if (i > 0) Divider()
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Muted(JournalWriter.clock(c.timeMs, Summaries.zone, lang), Modifier.weight(1f))
-                            OptionTile(c.topic ?: tr("Not sure", "Pata nahi"), selected = c.topic != null, onClick = { fixing = c }, minHeight = 36.dp)
-                        }
-                        Text(c.text.ifBlank { tr("(nothing said)", "(kuch nahi kaha)") }, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
+            NotesList(notes, prefs.subjects, "")
         }
 
         BigButton(tr("Stop studying", "Padhai rokein"), {
@@ -125,13 +116,6 @@ fun StudyScreen(nav: Nav) {
         SubjectDialog(prefs.subjects, { switchTopic = false }) { s ->
             switchTopic = false
             store.addCheckIn(session.id, CheckIn(System.currentTimeMillis(), "", s, CheckInKind.SWITCH))
-        }
-    }
-    val fix = fixing
-    if (fix != null && session != null) {
-        SubjectDialog(prefs.subjects, { fixing = null }) { s ->
-            fixing = null
-            store.correctCheckIn(session.id, fix.timeMs, s)
         }
     }
 }

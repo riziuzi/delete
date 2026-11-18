@@ -30,6 +30,8 @@ class VoiceRecognizer(
 
     interface Listener {
         fun onReady(engine: Engine) {}
+        /** The microphone is open and the user can start talking. */
+        fun onListening() {}
         fun onPartial(text: String) {}
         fun onSegment(text: String) {}
         fun onLevel(level: Float) {}
@@ -43,6 +45,12 @@ class VoiceRecognizer(
     private var active = false
     private var finished = false
     private var triedSystem = false
+    private var told = false
+
+    // If the on-device model can't do this language, remember it and go straight to the regular
+    // recogniser next time instead of failing first (that round trip was the delay before listening).
+    private val memo = context.getSharedPreferences(MEMO, Context.MODE_PRIVATE)
+    private val memoKey = "skipOnDevice_" + primaryTag(lang)
 
     var engine = Engine.NONE
         private set
@@ -50,7 +58,8 @@ class VoiceRecognizer(
     fun start() {
         active = true
         finished = false
-        if (!create(onDevice = !triedSystem)) return
+        told = false
+        if (!create(onDevice = !triedSystem && !memo.getBoolean(memoKey, false))) return
         listen()
     }
 
@@ -121,7 +130,12 @@ class VoiceRecognizer(
     }
 
     private val callbacks = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onReadyForSpeech(params: Bundle?) {
+            if (!told) {
+                told = true
+                listener.onListening()
+            }
+        }
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) = listener.onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
         override fun onBufferReceived(buffer: ByteArray?) {}
@@ -166,6 +180,7 @@ class VoiceRecognizer(
     /** The on-device model can't handle this language yet: use the phone's regular recogniser instead. */
     private fun fallBack() {
         triedSystem = true
+        memo.edit().putBoolean(memoKey, true).apply()
         val wasActive = active
         if (create(onDevice = false) && wasActive) {
             active = true
@@ -180,6 +195,8 @@ class VoiceRecognizer(
     }
 
     companion object {
+        private const val MEMO = "voice"
+
         fun primaryTag(lang: VoiceLang) = if (lang == VoiceLang.ENGLISH) "en-IN" else "hi-IN"
 
         fun intent(context: Context, lang: VoiceLang): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -189,7 +206,9 @@ class VoiceRecognizer(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+            // Wait longer before closing a phrase, so a short pause doesn't cut the sentence.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
             if (Build.VERSION.SDK_INT >= 33) {
                 putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
             }
@@ -234,6 +253,8 @@ class VoiceRecognizer(
         /** Asks Android to download the on-device model for this language (Android 13+). */
         @RequiresApi(33)
         fun downloadModel(context: Context, tag: String): Boolean {
+            // Try on-device again once a pack is being installed.
+            context.getSharedPreferences(MEMO, Context.MODE_PRIVATE).edit().clear().apply()
             val r = runCatching { SpeechRecognizer.createOnDeviceSpeechRecognizer(context) }.getOrNull() ?: return false
             return runCatching {
                 r.triggerModelDownload(
