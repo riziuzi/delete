@@ -123,8 +123,13 @@ fun NoteRow(c: CheckIn, subjects: List<String>, modifier: Modifier = Modifier) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 subjects.forEach { s ->
                     OptionTile(s, s == c.topic, {
-                        store.updateCheckIn(c.timeMs) { it.copy(topic = s, corrected = true) }
-                        if (c.text.isNotBlank()) store.learn(s, c.text)
+                        if (s != c.topic) {
+                            store.updateCheckIn(c.timeMs) { it.copy(topic = s, corrected = true) }
+                            if (c.text.isNotBlank()) {
+                                c.topic?.let { old -> store.unlearn(old, c.text) }
+                                store.learn(s, c.text, strong = true)
+                            }
+                        }
                     }, minHeight = 36.dp)
                 }
             }

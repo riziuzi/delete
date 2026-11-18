@@ -92,5 +92,11 @@ object Summaries {
         return (inSessions + free).sortedBy { it.timeMs }
     }
 
-    fun classifier(ctx: Context): TopicClassifier = TopicClassifier(Prefs(ctx).subjects, Store.get(ctx).examples)
+    /** Word list + words learned from your notes + the on-device meaning model. */
+    fun classifier(ctx: Context): TopicClassifier {
+        val store = Store.get(ctx)
+        return TopicClassifier(
+            Prefs(ctx).subjects, store.examples, MeaningModel.get(ctx), com.riziuzi.utho.core.Learning.learnedWords(store.wordCounts),
+        )
+    }
 }

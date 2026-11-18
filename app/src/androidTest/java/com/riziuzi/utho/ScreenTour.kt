@@ -175,6 +175,11 @@ class ScreenTour {
         shot("18-settings-top")
         rule.onNodeWithText("Offline voice").performScrollTo()
         shot("19-settings-voice")
+        tag("sound-chime").performScrollTo().performClick()
+        shot("19b-settings-sound")
+        rule.onNodeWithText("What Utho has learned").performScrollTo().performClick()
+        shot("19c-learned")
+        back()
         tag("deleteAll").performScrollTo()
         shot("20-settings-bottom")
 
@@ -243,6 +248,19 @@ class ScreenTour {
 
         endStudy(ctx)
         shot("31-end")
+
+        // ---- dark theme: the pop-up's text must be readable
+        Prefs(ctx).theme = "dark"
+        startActivity(CheckInActivity.noteIntent(ctx, type = true))
+        Thread.sleep(1500)
+        tag("checkInType").performTextInput("political parties padhi, mood badhiya")
+        tag("checkInNext").performClick()
+        shot("32-note-dark", 500)
+        tag("checkInSubject").assertTextEquals("Subject: Polity")
+        tag("checkInMood").assertTextEquals("Mood: Great")
+        tag("checkInSave").performClick()
+        Thread.sleep(800)
+        Prefs(ctx).theme = "system"
     }
 
     @Test

@@ -56,6 +56,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.riziuzi.utho.alarm.AlarmService
 import com.riziuzi.utho.alarm.Beeper
+import com.riziuzi.utho.voice.BeepMuter
+import com.riziuzi.utho.voice.Earcons
+import android.os.Handler
+import android.os.Looper
 import com.riziuzi.utho.alarm.Notifications
 import com.riziuzi.utho.core.CheckIn
 import com.riziuzi.utho.core.CheckInKind
@@ -100,11 +104,12 @@ class CheckInActivity : ComponentActivity() {
             return
         }
         if (target != null) Notifications.cancel(this, Notifications.ID_MISSED)
+        com.riziuzi.utho.data.MeaningModel.preload(this)
         val typeFirst = intent.getBooleanExtra(EXTRA_TYPE, false)
         val prefs = Prefs(this)
         setContent {
             UthoTheme(prefs.theme, prefs.lang) {
-                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin, prefs.beepVolume) { finish() }
+                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin) { finish() }
             }
         }
     }
@@ -142,7 +147,6 @@ private fun CheckInScreen(
     target: CheckIn?,
     typeFirst: Boolean,
     interval: Int,
-    beepVolume: Int,
     onDone: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -174,9 +178,22 @@ private fun CheckInScreen(
     var closeIn by remember { mutableIntStateOf(5) }
     var closeAt by remember { mutableLongStateOf(0L) }
     var saved by remember { mutableStateOf(false) }
+    var touched by remember { mutableStateOf(false) }
 
     val micOk = remember { ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
-    val beeper = remember { Beeper(beepVolume) }
+    // One soft sound when the mic really opens, one when it closes; Google's own beeps are muted meanwhile.
+    val sound = remember { prefs.checkInSound }
+    val muter = remember { BeepMuter(ctx) }
+    var micOpen by remember { mutableStateOf(false) }
+
+    fun closeMic() {
+        if (micOpen) {
+            micOpen = false
+            Earcons.play(ctx, sound, open = false)
+        }
+        // The recogniser's own stop beep comes just after it stops; keep media muted until it has passed.
+        Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, 800)
+    }
 
     fun save() {
         if (saved) return
@@ -191,7 +208,11 @@ private fun CheckInScreen(
             else -> store.addFreeNote(c)
         }
         mood?.let { store.setDayMood(Instant.ofEpochMilli(startedAt).atZone(Summaries.zone).toLocalDate(), it) }
-        if (corrected && chosen != null && text.isNotBlank()) store.learn(chosen, text)
+        // The word list grows from notes you confirmed: a fix counts double, a plain Save once.
+        // A timed pop-up that saved itself without a tap teaches nothing (it may have guessed wrong).
+        if (chosen != null && text.isNotBlank()) {
+            if (corrected) store.learn(chosen, text, strong = true) else if (!timed || touched) store.learn(chosen, text, strong = false)
+        }
         onDone()
     }
 
@@ -217,6 +238,7 @@ private fun CheckInScreen(
     }
 
     fun afterListening() {
+        closeMic()
         val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
         when {
             heard.isNotEmpty() -> analyse(heard.joinToString(" "), Hinglish.note(heard))
@@ -232,7 +254,10 @@ private fun CheckInScreen(
         VoiceRecognizer(ctx, prefs.voiceLang, object : VoiceRecognizer.Listener {
             override fun onListening() {
                 setReady()
-                beeper.chime()
+                if (!micOpen) {
+                    micOpen = true
+                    Earcons.play(ctx, sound, open = true)
+                }
             }
             override fun onPartial(text: String) {
                 partial = text
@@ -281,7 +306,7 @@ private fun CheckInScreen(
     DisposableEffect(Unit) {
         onDispose {
             recognizer.destroy()
-            beeper.release()
+            muter.unmute()
         }
     }
 
@@ -289,6 +314,7 @@ private fun CheckInScreen(
     LaunchedEffect(round, stage == Stage.LISTENING) {
         if (stage != Stage.LISTENING) return@LaunchedEffect
         if (micOk) {
+            muter.mute()
             recognizer.start()
         } else {
             problem = lang.t2("Microphone permission is off. Open Utho once and allow the microphone.", "Mic ki permission band hai. Utho kholkar mic allow karein.")
@@ -377,10 +403,15 @@ private fun CheckInScreen(
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) }
                 ButtonsRow {
                     if (timed) {
-                        SecondButton(tr("Skip", "Skip"), { missed() }, Modifier.weight(1f))
+                        SecondButton(tr("Skip", "Skip"), {
+                            recognizer.destroy()
+                            closeMic()
+                            missed()
+                        }, Modifier.weight(1f))
                     } else {
                         SecondButton(tr("Type", "Type"), {
                             recognizer.destroy()
+                            closeMic()
                             val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
                             typed = if (heard.isEmpty()) "" else Hinglish.note(heard)
                             stage = Stage.TYPING
@@ -388,7 +419,13 @@ private fun CheckInScreen(
                     }
                     BigButton(tr("Done", "Ho gaya"), { stopListening() }, Modifier.weight(1f).testTag("checkInDone"))
                 }
-                if (!timed) SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
+                if (!timed) {
+                    SmallTextButton(tr("Cancel", "Cancel")) {
+                        recognizer.destroy()
+                        closeMic()
+                        onDone()
+                    }
+                }
             }
 
             Stage.TYPING -> {
@@ -427,6 +464,7 @@ private fun CheckInScreen(
                     subjects.forEach { s ->
                         OptionTile(s, s == topic, {
                             topic = if (topic == s) null else s
+                            touched = true
                             closeAt = System.currentTimeMillis() + 5000
                         }, minHeight = 44.dp)
                     }
@@ -435,12 +473,16 @@ private fun CheckInScreen(
                     (0..4).forEach { m ->
                         OptionTile(Moods.label(m, lang), m == mood, {
                             mood = if (mood == m) null else m
+                            touched = true
                             closeAt = System.currentTimeMillis() + 5000
                         }, minHeight = 44.dp)
                     }
                 }
                 if (timed) {
-                    BigButton("Save ($closeIn)", { save() }, Modifier.testTag("checkInSave"))
+                    BigButton("Save ($closeIn)", {
+                        touched = true
+                        save()
+                    }, Modifier.testTag("checkInSave"))
                 } else {
                     ButtonsRow {
                         SecondButton(tr("Speak again", "Phir bolein"), { listenAgain() }, Modifier.weight(1f))

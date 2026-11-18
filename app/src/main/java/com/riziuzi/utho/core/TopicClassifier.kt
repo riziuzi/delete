@@ -1,5 +1,6 @@
 package com.riziuzi.utho.core
 
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -7,16 +8,20 @@ import kotlin.math.sqrt
 data class Lexicon(val aliases: List<String>, val keywords: List<String>)
 
 /**
- * Picks which of the user's topics a short spoken note is about. Runs fully on the phone, instantly.
+ * Picks which of the user's subjects a short note is about. Runs fully on the phone, instantly. Three parts:
  *
- * Score per topic =
- *   3 x (topic name or a known alias of it is said)
- * + 1 x each built-in word of that subject that is said, 2 x each phrase (max 6)
- * + 5 x similarity to notes the user previously filed under that topic (learned from corrections).
+ *  1. Word list: subject names and built-in words (English, Hindi, Hinglish; also English words the Hindi
+ *     recogniser writes in Hindi script, by sound). 3 x name said + 1 x each word, 2 x each phrase (max 6).
+ *  2. Learned words ([learned]): words that kept turning up in your own notes for a subject (see [Learning]).
+ *  3. Meaning ([meaning]): the on-device AI word vectors. Compares the note's meaning with each subject
+ *     (its words plus your past notes in it), so new phrasing still finds the right subject.
+ * Plus similarity to notes you previously filed under each subject.
  */
 class TopicClassifier(
     private val topics: List<String>,
     private val examples: Map<String, List<String>> = emptyMap(),
+    private val meaning: Meaning? = null,
+    private val learned: Map<String, List<String>> = emptyMap(),
 ) {
     data class Scored(val topic: String, val score: Double)
 
@@ -27,10 +32,17 @@ class TopicClassifier(
         val norm = normalize(topic)
         val lex = LEXICON.filter { lx -> lx.aliases.any { aliasMatches(normalize(it), norm) } }
         val names = (listOf(norm) + lex.flatMap { it.aliases }.map { normalize(it) }).filter { it.isNotBlank() }.distinct()
-        val keywords = lex.flatMap { it.keywords }.map { normalize(it) }.filter { it.isNotBlank() }.distinct()
+        val keywords = (lex.flatMap { it.keywords }.map { normalize(it) } + (learned[topic] ?: emptyList())).filter { it.isNotBlank() }.distinct()
         val ex = (examples[topic] ?: emptyList()).map { trigrams(normalize(it)) }
-        Prepared(topic, names, names.map { soundKeys(it) }, keywords, keywords.map { soundKeys(it) }, ex)
+        // What the subject means: its name, aliases and words, plus the notes filed under it.
+        val proto = meaning?.embed((listOf(topic) + names + names + keywords).joinToString(" "))
+        val exVecs = meaning?.let { m -> (examples[topic] ?: emptyList()).mapNotNull { m.embed(it) } } ?: emptyList()
+        Prepared(topic, names, names.map { soundKeys(it) }, keywords, keywords.map { soundKeys(it) }, ex, proto, exVecs)
     }
+
+    /** How close each subject already is to everyday study talk; taken off so no subject gets notes by default. */
+    private val bias: List<Double> = meaning?.embed(NEUTRAL)?.let { n -> prepared.map { p -> p.proto?.let { Meaning.cosine(n, it) } ?: 0.0 } }
+        ?: prepared.map { 0.0 }
 
     private class Prepared(
         val topic: String,
@@ -39,18 +51,18 @@ class TopicClassifier(
         val keywords: List<String>,
         val keywordKeys: List<List<String>>,
         val examples: List<Map<String, Int>>,
+        val proto: FloatArray?,
+        val exampleVecs: List<FloatArray>,
     )
 
-    fun classify(text: String): Result {
-        val norm = normalize(text)
-        if (norm.isBlank() || topics.isEmpty()) return Result(null, topics.map { Scored(it, 0.0) }, false)
+    /** Word-list score of each subject (no meaning model). */
+    private fun wordScores(norm: String): List<Double> {
         val tokens = norm.split(" ")
         val padded = " $norm "
         val grams = trigrams(norm)
         // Sound-alike keys catch English words written in Hindi script (मैथ्स = maths).
         val textKeys = tokens.map { if (it in STOP_TOKENS || !Phonetic.hasDevanagari(it)) "" else Phonetic.key(it) }
-
-        val ranked = prepared.map { p ->
+        return prepared.map { p ->
             val nameHits = p.names.indices.count { matches(p.names[it], tokens, padded) || Phonetic.contains(textKeys, p.nameKeys[it], 3) }
             // A matched phrase ("climate change") says more than a single word ("climate"), so it counts double.
             var keywordHits = 0
@@ -61,17 +73,62 @@ class TopicClassifier(
             }
             val sim = p.examples.maxOfOrNull { cosine(grams, it) } ?: 0.0
             val exampleScore = if (sim >= 0.3) 5.0 * sim else 0.0
-            Scored(p.topic, 3.0 * min(nameHits, 2) + min(keywordHits, 6) + exampleScore)
-        }.sortedByDescending { it.score }
+            3.0 * min(nameHits, 2) + min(keywordHits, 6) + exampleScore
+        }
+    }
 
+    /** Meaning similarity of the note to each subject (its description, or your closest past note in it). */
+    fun meaningScores(text: String): List<Double>? {
+        val m = meaning ?: return null
+        val v = m.embed(text) ?: return null
+        return prepared.map { p ->
+            val toSubject = p.proto?.let { Meaning.cosine(v, it) - bias[prepared.indexOf(p)] } ?: 0.0
+            val toNotes = p.exampleVecs.maxOfOrNull { Meaning.cosine(v, it) - EXAMPLE_DISCOUNT } ?: -1.0
+            max(toSubject, toNotes)
+        }
+    }
+
+    fun classify(text: String): Result {
+        val norm = normalize(text)
+        if (norm.isBlank() || topics.isEmpty()) return Result(null, topics.map { Scored(it, 0.0) }, false)
+        val words = wordScores(norm)
+        val sims = meaningScores(text)
+        val topWord = words.max()
+        // The word list decides when it's clear. Meaning only settles near-ties, or speaks when no word matched.
+        val scores = words.indices.map { i ->
+            val inTie = topWord > 0.0 && words[i] >= topWord - 1.0
+            words[i] + if (sims != null && inTie) TIE_WEIGHT * sims[i] else 0.0
+        }
+        val ranked = prepared.indices.map { Scored(prepared[it].topic, scores[it]) }.sortedByDescending { it.score }
         val top = ranked.first()
         val second = ranked.getOrNull(1)?.score ?: 0.0
-        if (top.score <= 0.0) return Result(null, ranked, false)
-        val confident = top.score >= 1.0 && top.score >= second + 1.0
-        return Result(top.topic, ranked, confident)
+        if (topWord > 0.0) {
+            return Result(top.topic, ranked, top.score >= 1.0 && top.score >= second + 1.0)
+        }
+        if (sims != null) {
+            val order = sims.indices.sortedByDescending { sims[it] }
+            val a = sims[order[0]]
+            val b = order.getOrNull(1)?.let { sims[it] } ?: 0.0
+            if (a >= MEANING_FLOOR && a - b >= MEANING_GAP) {
+                val byMeaning = order.map { Scored(prepared[it].topic, sims[it]) }
+                return Result(prepared[order[0]].topic, byMeaning, a - b >= 2 * MEANING_GAP)
+            }
+        }
+        return Result(null, ranked, false)
     }
 
     companion object {
+        /** Tuned on the phrase sets in the unit tests (SubjectMeaningTest). */
+        var TIE_WEIGHT = 1.0
+        var MEANING_FLOOR = 0.45
+        var MEANING_GAP = 0.04
+        var EXAMPLE_DISCOUNT = 0.05
+
+        /** Everyday study talk with no subject in it (see [bias]). */
+        private const val NEUTRAL =
+            "aaj maine do ghante padhai ki kuch nahi kiya thak gaya mood accha hai revision chapter questions notes " +
+                "today i studied for two hours did some reading took a break feeling okay " +
+                "आज मैंने पढ़ाई की कुछ नहीं किया थक गया मूड अच्छा है"
         /** Romanised Hindi words in the lexicon: matched by spelling only, never by sound (ganit ~ घंटे). */
         private val ROMAN_HINDI = setOf(
             "rajvyavastha", "samvidhan", "sansad", "anuched", "adhikar", "itihas", "angrez", "andolan", "bhugol", "nadi", "parvat",
@@ -131,6 +188,7 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("polity", "राजव्यवस्था", "राजनीति", "rajvyavastha", "constitution", "gs2", "governance", "शासन"),
                 keywords = listOf(
+                    "equality", "right to equality", "समानता", "law", "laws", "कानून", "minister", "ministers", "मंत्री",
                     "political", "politics", "political party", "political parties", "राजनीतिक", "राजनीतिक दल", "राजनीतिक पार्टी",
                     "anti defection", "defection", "दलबदल", "election commission", "चुनाव आयोग", "voting", "मतदान", "representation of people",
                     "local government", "panchayati raj", "पंचायती राज", "municipality", "नगरपालिका", "fundamental duties", "मौलिक कर्तव्य",
@@ -152,6 +210,7 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("history", "इतिहास", "itihas", "art and culture", "culture", "संस्कृति"),
                 keywords = listOf(
+                    "king", "kings", "kingdom", "kingdoms", "emperor", "emperors", "ruler", "rulers", "dynasties", "war", "wars", "battle", "battles", "colonial", "raja", "राजा", "सम्राट", "युद्ध",
                     "ashoka", "अशोक", "chola", "चोल", "vijayanagar", "विजयनगर", "maratha", "मराठा", "shivaji", "शिवाजी", "delhi sultanate",
                     "rajput", "राजपूत", "indus valley", "सिंधु घाटी", "civilization", "civilisation", "सभ्यता", "mahajanapada", "महाजनपद",
                     "freedom fighter", "स्वतंत्रता सेनानी", "nehru", "नेहरू", "subhash", "सुभाष", "bhagat singh", "भगत सिंह", "partition", "विभाजन",
@@ -173,6 +232,7 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("geography", "भूगोल", "bhugol"),
                 keywords = listOf(
+                    "rain", "weather", "मौसम", "hills", "valley", "valleys", "sea", "seas", "plains", "मैदान",
                     "physical geography", "human geography", "world geography", "crops", "फसल", "irrigation", "सिंचाई", "drainage", "अपवाह",
                     "rocks", "चट्टान", "landforms", "स्थलाकृति", "winds", "पवन", "ocean currents", "currents", "धाराएं", "tides", "ज्वार",
                     "population", "जनसंख्या", "census", "जनगणना", "urbanisation", "urbanization", "नगरीकरण", "settlement", "transport",
@@ -224,6 +284,7 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("ethics", "नीतिशास्त्र", "gs4", "नैतिकता"),
                 keywords = listOf(
+                    "right and wrong", "fairness", "kindness", "virtue", "duty",
                     "ethical", "नैतिक", "moral", "morality", "नैतिक मूल्य", "empathy", "सहानुभूति", "compassion", "करुणा", "honesty",
                     "accountability", "जवाबदेही", "transparency", "पारदर्शिता", "corruption", "भ्रष्टाचार", "conscience", "अंतरात्मा",
                     "thinkers", "philosopher", "philosophers", "दार्शनिक", "aristotle", "kant", "dilemma", "दुविधा", "ethical dilemma",

@@ -338,6 +338,10 @@ fun SettingsScreen(nav: Nav) {
             )
             Muted(tr("Both = Hindi and English mixed in one sentence.", "Dono = ek hi sentence mein Hindi aur English."))
             Divider()
+            CheckInSound()
+            Divider()
+            NavRow(tr("What Utho has learned", "Utho ne kya seekha"), null, { nav.go(Route.Learned) })
+            Divider()
             OfflineVoice()
         }
 
@@ -487,5 +491,71 @@ private fun OfflineVoice() {
                 "Voice aapke phone ka system use karta hai. Offline ke liye Google app › Settings › Voice › Offline speech recognition mein Hindi download karein.",
             ),
         )
+    }
+}
+
+/** Pick the sound for "mic on" / "mic off"; tapping one plays it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CheckInSound() {
+    val ctx = LocalContext.current
+    val lang = LocalLang.current
+    val prefs = remember { Prefs(ctx) }
+    var chosen by remember { mutableStateOf(prefs.checkInSound) }
+    Text(tr("Sound when the mic opens and closes", "Mic khulne aur band hone ki awaaz"), fontSize = 16.sp)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        com.riziuzi.utho.voice.Earcons.options.forEach { key ->
+            OptionTile(com.riziuzi.utho.voice.Earcons.label(key, lang), key == chosen, {
+                chosen = key
+                prefs.checkInSound = key
+                com.riziuzi.utho.voice.Earcons.preview(ctx, key)
+            }, minHeight = 40.dp, modifier = Modifier.testTag("sound-$key"))
+        }
+    }
+    Muted(tr("Tap to hear it. Plays once when listening starts and once when it stops.", "Tap karke sunein. Sunna shuru hone par ek baar aur band hone par ek baar bajegi."))
+}
+
+/** The words Utho picked up from your notes, per subject. Tap a word to drop it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun LearnedScreen(nav: Nav) {
+    val ctx = LocalContext.current
+    val tick = rememberTick()
+    val store = remember { Store.get(ctx) }
+    val prefs = remember { Prefs(ctx) }
+    val learned = remember(tick) { com.riziuzi.utho.core.Learning.learnedWords(store.wordCounts) }
+    val examples = remember(tick) { store.examples }
+    ScreenScaffold(title = tr("What Utho has learned", "Utho ne kya seekha"), onBack = { nav.back() }) {
+        Muted(
+            tr(
+                "Subjects are picked in three ways: built-in words for each subject, a small AI on your phone that understands meaning, " +
+                    "and the words below, learned from notes you saved or fixed. A word is added once it shows up at least twice, mostly in one subject.",
+                "Subject teen tarah se chuna jaata hai: har subject ke built-in words, phone par chalne wala chhota AI jo matlab samajhta hai, " +
+                    "aur neeche wale words jo aapke save ya theek kiye notes se seekhe gaye. Koi word do baar, zyada tar ek hi subject mein aaye to jud jaata hai.",
+            ),
+        )
+        prefs.subjects.forEach { subject ->
+            val words = learned[subject] ?: emptyList()
+            val notes = examples[subject]?.size ?: 0
+            CardBox(modifier = Modifier.testTag("learned-$subject")) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(subject, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Muted(tr("$notes notes", "$notes notes"))
+                }
+                if (words.isEmpty()) {
+                    Muted(tr("Nothing learned yet.", "Abhi kuch nahi seekha."))
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        words.forEach { w ->
+                            InputChip(
+                                selected = false, onClick = { store.forgetWord(subject, w) }, label = { Text(w) },
+                                trailingIcon = { Icon(Icons.Filled.Close, contentDescription = tr("Remove", "Hatayein"), Modifier.size(16.dp)) },
+                            )
+                        }
+                    }
+                }
+                if (notes > 0 || words.isNotEmpty()) SmallTextButton(tr("Forget this subject", "Yeh subject bhool jao")) { store.forgetTopic(subject) }
+            }
+        }
     }
 }

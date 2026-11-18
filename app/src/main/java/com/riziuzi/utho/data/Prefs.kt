@@ -115,6 +115,11 @@ class Prefs(context: Context) {
 
     // ---- study ----
     /** Minutes between voice check-ins while studying. 0 = off. */
+    /** Sound when a voice note's mic opens and closes (see Earcons): bowl, chime, drop, pad or off. */
+    var checkInSound: String
+        get() = p.getString("checkInSound", com.riziuzi.utho.voice.Earcons.DEFAULT) ?: com.riziuzi.utho.voice.Earcons.DEFAULT
+        set(v) = edit { putString("checkInSound", v) }
+
     var checkInMin: Int
         get() = p.getInt("checkInMin", 30)
         set(v) = edit { putInt("checkInMin", v) }

@@ -45,6 +45,7 @@ sealed interface Route {
     data class Journal(val epochDay: Long) : Route
     data object Profile : Route
     data object Settings : Route
+    data object Learned : Route
 }
 
 enum class Tab { TODAY, PROGRESS, GROUP }
@@ -126,6 +127,7 @@ fun AppRoot(open: MutableState<String?>) {
                 is Route.Journal -> JournalScreen(nav, LocalDate.ofEpochDay(r.epochDay))
                 Route.Profile -> ProfileScreen(nav)
                 Route.Settings -> SettingsScreen(nav)
+                Route.Learned -> LearnedScreen(nav)
             }
         }
     }

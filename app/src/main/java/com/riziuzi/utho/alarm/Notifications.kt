@@ -15,7 +15,8 @@ import com.riziuzi.utho.ui.MainActivity
 
 object Notifications {
     const val CH_ALARM = "alarm"
-    const val CH_CHECKIN = "checkin"
+    /** Silent: the pop-up makes its own single sound when the mic opens. */
+    const val CH_CHECKIN = "checkin_quiet"
     const val CH_REMIND = "reminders"
     const val CH_SESSION = "session"
 
@@ -35,8 +36,12 @@ object Notifications {
                 setSound(null, null) // the alarm sound is played by AlarmService
             },
         )
+        nm.deleteNotificationChannel("checkin") // older, noisy version of the channel
         nm.createNotificationChannel(
-            NotificationChannel(CH_CHECKIN, lang.t("Study check-ins", "Padhai check-in"), NotificationManager.IMPORTANCE_HIGH),
+            NotificationChannel(CH_CHECKIN, lang.t("Study check-ins", "Padhai check-in"), NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(null, null)
+                enableVibration(false)
+            },
         )
         nm.createNotificationChannel(
             NotificationChannel(CH_REMIND, lang.t("Reminders", "Reminders"), NotificationManager.IMPORTANCE_DEFAULT),

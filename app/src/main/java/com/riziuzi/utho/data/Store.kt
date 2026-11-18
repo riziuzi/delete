@@ -21,6 +21,8 @@ class Store private constructor(context: Context) {
     private val workoutsList = mutableListOf<WorkoutRecord>()
     private val notesMap = mutableMapOf<String, DayNote>()
     private val examplesMap = mutableMapOf<String, MutableList<String>>()
+    /** How often each word appeared in notes saved under each subject (the word list that grows with use). */
+    private val wordCountsMap = mutableMapOf<String, MutableMap<String, Int>>()
     private val freeNotesList = mutableListOf<CheckIn>()
 
     init {
@@ -30,6 +32,7 @@ class Store private constructor(context: Context) {
     val sessions: List<StudySession> get() = synchronized(lock) { sessionsList.toList() }
     val workouts: List<WorkoutRecord> get() = synchronized(lock) { workoutsList.toList() }
     val examples: Map<String, List<String>> get() = synchronized(lock) { examplesMap.mapValues { it.value.toList() } }
+    val wordCounts: Map<String, Map<String, Int>> get() = synchronized(lock) { wordCountsMap.mapValues { it.value.toMap() } }
 
     /** Voice notes spoken outside a study session (from the home screen or the journal). */
     val freeNotes: List<CheckIn> get() = synchronized(lock) { freeNotesList.toList() }
@@ -116,10 +119,33 @@ class Store private constructor(context: Context) {
         if (text.isNotBlank()) learn(topic, text)
     }
 
-    fun learn(topic: String, text: String) = change {
+    /** Keeps [text] as an example of [topic] and counts its words for it; a correction ([strong]) counts double. */
+    fun learn(topic: String, text: String, strong: Boolean = true) = change {
         val list = examplesMap.getOrPut(topic) { mutableListOf() }
+        list.remove(text)
         list += text
-        while (list.size > 30) list.removeAt(0)
+        while (list.size > 40) list.removeAt(0)
+        val counts = wordCountsMap.getOrPut(topic) { mutableMapOf() }
+        for (w in com.riziuzi.utho.core.Learning.contentWords(text)) counts[w] = (counts[w] ?: 0) + if (strong) 2 else 1
+    }
+
+    /** The note was moved away from [topic]: stop counting it there. */
+    fun unlearn(topic: String, text: String) = change {
+        examplesMap[topic]?.remove(text)
+        val counts = wordCountsMap[topic] ?: return@change
+        for (w in com.riziuzi.utho.core.Learning.contentWords(text)) {
+            val c = (counts[w] ?: 0) - 1
+            if (c <= 0) counts.remove(w) else counts[w] = c
+        }
+    }
+
+    /** Settings: drop one learned word from a subject. */
+    fun forgetWord(topic: String, word: String) = change { wordCountsMap[topic]?.remove(word) }
+
+    /** Settings: forget everything learned for a subject. */
+    fun forgetTopic(topic: String) = change {
+        examplesMap.remove(topic)
+        wordCountsMap.remove(topic)
     }
 
     fun addWorkout(r: WorkoutRecord) = change { workoutsList += r }
@@ -133,6 +159,7 @@ class Store private constructor(context: Context) {
         workoutsList.clear()
         notesMap.clear()
         examplesMap.clear()
+        wordCountsMap.clear()
         freeNotesList.clear()
     }
 
@@ -184,6 +211,7 @@ class Store private constructor(context: Context) {
             }
         })
         o.put("examples", JSONObject().apply { examplesMap.forEach { (k, v) -> put(k, JSONArray(v)) } })
+        o.put("wordCounts", JSONObject().apply { wordCountsMap.forEach { (k, v) -> put(k, JSONObject(v as Map<*, *>)) } })
         o.put("freeNotes", JSONArray().apply { freeNotesList.forEach { put(checkInJson(it)) } })
         return o
     }
@@ -242,6 +270,12 @@ class Store private constructor(context: Context) {
                 for (k in e.keys()) {
                     val a = e.getJSONArray(k)
                     examplesMap[k] = (0 until a.length()).map { a.getString(it) }.toMutableList()
+                }
+            }
+            o.optJSONObject("wordCounts")?.let { e ->
+                for (k in e.keys()) {
+                    val x = e.getJSONObject(k)
+                    wordCountsMap[k] = x.keys().asSequence().associateWith { x.getInt(it) }.toMutableMap()
                 }
             }
         }
