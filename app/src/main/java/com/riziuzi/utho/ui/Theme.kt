@@ -1,6 +1,7 @@
 package com.riziuzi.utho.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -72,6 +73,10 @@ fun UthoTheme(theme: String, lang: Lang, content: @Composable () -> Unit) {
         else -> isSystemInDarkTheme()
     }
     CompositionLocalProvider(LocalLang provides lang) {
-        MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+        val scheme = if (dark) Dark else Light
+        MaterialTheme(colorScheme = scheme) {
+            // Text without its own colour follows the theme (it was black on dark screens without a Surface).
+            CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+        }
     }
 }

@@ -11,7 +11,7 @@ data class Lexicon(val aliases: List<String>, val keywords: List<String>)
  *
  * Score per topic =
  *   3 x (topic name or a known alias of it is said)
- * + 1 x each built-in keyword of that subject that is said (max 5)
+ * + 1 x each built-in word of that subject that is said, 2 x each phrase (max 6)
  * + 5 x similarity to notes the user previously filed under that topic (learned from corrections).
  */
 class TopicClassifier(
@@ -52,10 +52,16 @@ class TopicClassifier(
 
         val ranked = prepared.map { p ->
             val nameHits = p.names.indices.count { matches(p.names[it], tokens, padded) || Phonetic.contains(textKeys, p.nameKeys[it], 3) }
-            val keywordHits = p.keywords.indices.count { matches(p.keywords[it], tokens, padded) || Phonetic.contains(textKeys, p.keywordKeys[it], 4) }
+            // A matched phrase ("climate change") says more than a single word ("climate"), so it counts double.
+            var keywordHits = 0
+            for (i in p.keywords.indices) {
+                if (matches(p.keywords[i], tokens, padded) || Phonetic.contains(textKeys, p.keywordKeys[i], 4)) {
+                    keywordHits += if (p.keywords[i].contains(' ')) 2 else 1
+                }
+            }
             val sim = p.examples.maxOfOrNull { cosine(grams, it) } ?: 0.0
             val exampleScore = if (sim >= 0.3) 5.0 * sim else 0.0
-            Scored(p.topic, 3.0 * min(nameHits, 2) + min(keywordHits, 5) + exampleScore)
+            Scored(p.topic, 3.0 * min(nameHits, 2) + min(keywordHits, 6) + exampleScore)
         }.sortedByDescending { it.score }
 
         val top = ranked.first()
@@ -97,7 +103,8 @@ class TopicClassifier(
         }
 
         private fun matches(term: String, tokens: List<String>, padded: String): Boolean {
-            if (term.contains(' ')) return padded.contains(" $term ")
+            // Phrases also match with a plural last word ("national park" ~ "national parks").
+            if (term.contains(' ')) return padded.contains(" $term ") || padded.contains(" ${term}s ") || padded.contains(" ${term}es ")
             return tokens.any { it == term || (term.length >= 4 && it.startsWith(term)) }
         }
 
@@ -124,6 +131,15 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("polity", "राजव्यवस्था", "राजनीति", "rajvyavastha", "constitution", "gs2", "governance", "शासन"),
                 keywords = listOf(
+                    "political", "politics", "political party", "political parties", "राजनीतिक", "राजनीतिक दल", "राजनीतिक पार्टी",
+                    "anti defection", "defection", "दलबदल", "election commission", "चुनाव आयोग", "voting", "मतदान", "representation of people",
+                    "local government", "panchayati raj", "पंचायती राज", "municipality", "नगरपालिका", "fundamental duties", "मौलिक कर्तव्य",
+                    "directive principles", "legislature", "विधायिका", "executive", "कार्यपालिका", "ordinance", "अध्यादेश", "attorney general",
+                    "comptroller", "cag", "finance commission", "वित्त आयोग", "constitutional body", "constitutional bodies", "statutory", "tribunal",
+                    "न्यायाधिकरण", "centre state", "centre state relations", "केंद्र राज्य", "union territory", "केंद्र शासित", "separation of powers",
+                    "judicial review", "न्यायिक समीक्षा", "basic structure", "मूल ढांचा", "pressure group", "दबाव समूह", "rti", "सूचना का अधिकार",
+                    "vidhan sabha", "विधानसभा", "democracy", "लोकतंत्र", "secularism", "धर्मनिरपेक्षता", "sovereignty", "संप्रभुता", "judges",
+                    "parliamentary", "संसदीय", "committee", "committees", "समिति", "constitutional", "संवैधानिक", "rajniti", "sansad",
                     "constitution", "संविधान", "samvidhan", "parliament", "संसद", "sansad", "article", "अनुच्छेद", "anuched",
                     "fundamental", "मौलिक", "rights", "राइट्स", "अधिकार", "adhikar", "president", "राष्ट्रपति", "governor", "राज्यपाल",
                     "judiciary", "न्यायपालिका", "supreme court", "सुप्रीम", "high court", "उच्च न्यायालय", "lok sabha", "लोकसभा",
@@ -136,6 +152,16 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("history", "इतिहास", "itihas", "art and culture", "culture", "संस्कृति"),
                 keywords = listOf(
+                    "ashoka", "अशोक", "chola", "चोल", "vijayanagar", "विजयनगर", "maratha", "मराठा", "shivaji", "शिवाजी", "delhi sultanate",
+                    "rajput", "राजपूत", "indus valley", "सिंधु घाटी", "civilization", "civilisation", "सभ्यता", "mahajanapada", "महाजनपद",
+                    "freedom fighter", "स्वतंत्रता सेनानी", "nehru", "नेहरू", "subhash", "सुभाष", "bhagat singh", "भगत सिंह", "partition", "विभाजन",
+                    "non cooperation", "असहयोग", "civil disobedience", "सविनय अवज्ञा", "quit india", "भारत छोड़ो", "swadeshi", "स्वदेशी",
+                    "governor general", "गवर्नर जनरल", "east india company", "ईस्ट इंडिया", "plassey", "प्लासी", "renaissance", "पुनर्जागरण",
+                    "social reform", "समाज सुधार", "bhakti", "भक्ति", "sufi", "सूफी", "world history", "विश्व इतिहास", "french revolution",
+                    "फ्रांसीसी क्रांति", "industrial revolution", "औद्योगिक क्रांति", "revolution", "क्रांति", "kranti", "world war", "विश्व युद्ध",
+                    "cold war", "शीत युद्ध", "colonialism", "उपनिवेशवाद", "classical dance", "dance", "नृत्य", "sculpture", "मूर्तिकला",
+                    "stupa", "स्तूप", "cave", "गुफा", "nitin singhania", "british rule", "ब्रिटिश शासन", "mughals", "sangam", "संगम",
+                    "national movement", "राष्ट्रीय आंदोलन", "freedom movement", "independence", "आजादी", "स्वतंत्रता संग्राम",
                     "mughal", "मुगल", "akbar", "अकबर", "british", "ब्रिटिश", "angrez", "अंग्रेज", "gandhi", "गांधी",
                     "freedom struggle", "स्वतंत्रता", "आंदोलन", "andolan", "movement", "harappa", "हड़प्पा", "हडप्पा", "vedic", "वैदिक",
                     "maurya", "मौर्य", "gupta", "गुप्त", "revolt", "विद्रोह", "1857", "congress", "कांग्रेस", "medieval",
@@ -147,6 +173,14 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("geography", "भूगोल", "bhugol"),
                 keywords = listOf(
+                    "physical geography", "human geography", "world geography", "crops", "फसल", "irrigation", "सिंचाई", "drainage", "अपवाह",
+                    "rocks", "चट्टान", "landforms", "स्थलाकृति", "winds", "पवन", "ocean currents", "currents", "धाराएं", "tides", "ज्वार",
+                    "population", "जनसंख्या", "census", "जनगणना", "urbanisation", "urbanization", "नगरीकरण", "settlement", "transport",
+                    "परिवहन", "resources", "संसाधन", "coal", "कोयला", "iron ore", "el nino", "la nina", "jet stream", "temperature", "तापमान",
+                    "humidity", "आर्द्रता", "clouds", "बादल", "lakes", "झील", "island", "द्वीप", "coast", "तट", "western ghats", "eastern ghats",
+                    "deccan", "दक्कन", "thar", "थार", "ganga", "गंगा", "brahmaputra", "ब्रह्मपुत्र", "peninsular", "प्रायद्वीपीय",
+                    "interior of earth", "पृथ्वी", "solar system", "सौर मंडल", "atlas", "एटलस", "gc leong", "goh cheng leong", "landslide",
+                    "भूस्खलन", "flood", "बाढ़", "drought", "सूखा", "tsunami", "सुनामी", "rivers", "नदियां", "mountains", "rajasthan",
                     "river", "नदी", "nadi", "mountain", "पर्वत", "parvat", "climate", "जलवायु", "monsoon", "मानसून", "soil",
                     "मिट्टी", "मृदा", "map", "मानचित्र", "नक्शा", "plate tectonics", "tectonic", "earthquake", "भूकंप", "volcano",
                     "ज्वालामुखी", "ocean", "महासागर", "latitude", "अक्षांश", "longitude", "देशांतर", "cyclone", "चक्रवात",
@@ -157,6 +191,15 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("economy", "economics", "अर्थव्यवस्था", "अर्थशास्त्र", "arthvyavastha", "arthashastra", "indian economy"),
                 keywords = listOf(
+                    "economic", "आर्थिक", "money", "मुद्रा", "banking", "बैंकिंग", "npa", "cpi", "wpi", "financial", "वित्तीय", "finance",
+                    "investment", "निवेश", "fdi", "foreign direct investment", "stock market", "share market", "शेयर", "insurance", "बीमा",
+                    "msme", "industry", "उद्योग", "industrial policy", "liberalisation", "उदारीकरण", "privatisation", "globalisation",
+                    "वैश्वीकरण", "five year plan", "पंचवर्षीय योजना", "niti aayog", "नीति आयोग", "planning", "नियोजन", "balance of payments",
+                    "भुगतान संतुलन", "currency", "rupee", "रुपया", "exchange rate", "विनिमय दर", "wto", "imf", "world bank", "विश्व बैंक",
+                    "taxation", "income tax", "आयकर", "direct tax", "indirect tax", "revenue", "राजस्व", "expenditure", "public debt", "ऋण",
+                    "demand", "मांग", "supply", "आपूर्ति", "national income", "राष्ट्रीय आय", "per capita", "प्रति व्यक्ति", "gnp", "msp",
+                    "न्यूनतम समर्थन मूल्य", "food security", "खाद्य सुरक्षा", "pds", "inclusive growth", "समावेशी विकास", "employment",
+                    "रोजगार", "mgnrega", "मनरेगा", "upi", "monetary policy", "fiscal policy", "fiscal deficit", "economy",
                     "gdp", "inflation", "मुद्रास्फीति", "महंगाई", "mehngai", "budget", "बजट", "tax", "gst", "rbi", "bank",
                     "बैंक", "monetary", "मौद्रिक", "fiscal", "राजकोषीय", "repo", "रेपो", "deficit", "घाटा", "poverty", "गरीबी",
                     "unemployment", "बेरोजगारी", "trade", "व्यापार", "export", "निर्यात", "import", "आयात", "market", "बाजार",
@@ -176,11 +219,16 @@ class TopicClassifier(
             ),
             Lexicon(
                 aliases = listOf("essay", "निबंध", "nibandh", "एस्से"),
-                keywords = listOf("essay", "निबंध", "nibandh", "introduction", "conclusion", "quote", "उद्धरण", "भूमिका", "निष्कर्ष"),
+                keywords = listOf("essay writing", "निबंध लेखन", "essays", "essay", "निबंध", "nibandh", "introduction", "conclusion", "quote", "उद्धरण", "भूमिका", "निष्कर्ष"),
             ),
             Lexicon(
                 aliases = listOf("ethics", "नीतिशास्त्र", "gs4", "नैतिकता"),
                 keywords = listOf(
+                    "ethical", "नैतिक", "moral", "morality", "नैतिक मूल्य", "empathy", "सहानुभूति", "compassion", "करुणा", "honesty",
+                    "accountability", "जवाबदेही", "transparency", "पारदर्शिता", "corruption", "भ्रष्टाचार", "conscience", "अंतरात्मा",
+                    "thinkers", "philosopher", "philosophers", "दार्शनिक", "aristotle", "kant", "dilemma", "दुविधा", "ethical dilemma",
+                    "public service", "लोक सेवा", "code of conduct", "आचार संहिता", "leadership", "नेतृत्व", "lexicon", "civil service values",
+                    "objectivity", "impartiality", "निष्पक्षता", "tolerance", "सहिष्णुता",
                     "ethics", "नैतिकता", "naitikta", "integrity", "सत्यनिष्ठा", "case study", "केस स्टडी", "emotional intelligence",
                     "भावनात्मक बुद्धिमत्ता", "values", "मूल्य", "attitude", "अभिवृत्ति", "probity", "ईमानदारी", "aptitude",
                 ),
@@ -188,6 +236,12 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("science", "विज्ञान", "vigyan", "science and technology", "science tech", "s t", "general science", "सामान्य विज्ञान"),
                 keywords = listOf(
+                    "internet", "इंटरनेट", "computer", "कंप्यूटर", "cyber", "साइबर", "cyber security", "5g", "blockchain", "quantum", "क्वांटम",
+                    "nanotechnology", "नैनो", "drdo", "डीआरडीओ", "chandrayaan", "चंद्रयान", "gaganyaan", "गगनयान", "mars", "मंगलयान",
+                    "moon", "चंद्रमा", "rocket", "रॉकेट", "pslv", "gslv", "genetic", "आनुवंशिक", "gene", "gene editing", "crispr",
+                    "stem cell", "disease", "रोग", "बीमारी", "medicine", "दवा", "antibiotic", "immunity", "प्रतिरक्षा", "ai", "electronics",
+                    "semiconductor", "सेमीकंडक्टर", "telecom", "laser", "nuclear energy", "atomic", "isro missions", "space mission",
+                    "मिशन", "अंतरिक्ष मिशन", "drone", "ड्रोन", "supercomputer",
                     "physics", "भौतिकी", "chemistry", "रसायन", "biology", "जीव", "cell", "कोशिका", "dna", "space", "अंतरिक्ष",
                     "isro", "इसरो", "satellite", "उपग्रह", "technology", "तकनीक", "प्रौद्योगिकी", "nuclear", "परमाणु", "vaccine",
                     "टीका", "virus", "वायरस", "robot", "artificial intelligence", "biotechnology", "जैव प्रौद्योगिकी", "missile", "मिसाइल",
@@ -196,6 +250,13 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("environment", "पर्यावरण", "paryavaran", "ecology", "पारिस्थितिकी"),
                 keywords = listOf(
+                    "environmental", "पर्यावरणीय", "global warming", "ग्लोबल वार्मिंग", "greenhouse", "ग्रीनहाउस", "ozone", "ओजोन",
+                    "conservation", "संरक्षण", "endangered", "संकटग्रस्त", "iucn", "paris agreement", "पेरिस समझौता", "kyoto",
+                    "renewable energy", "renewable", "नवीकरणीय", "solar energy", "सौर ऊर्जा", "waste management", "अपशिष्ट", "plastic",
+                    "air quality", "वायु गुणवत्ता", "water pollution", "जल प्रदूषण", "mangrove", "मैंग्रोव", "coral reef", "coral", "प्रवाल",
+                    "biosphere reserve", "जैवमंडल", "ramsar", "रामसर", "eia", "food chain", "खाद्य श्रृंखला", "invasive species", "cites",
+                    "wildlife protection", "emission", "उत्सर्जन", "net zero", "carbon credit", "sustainable development", "सतत विकास",
+                    "shankar ias", "hotspot", "hotspots", "national parks", "tiger reserves", "depletion", "cop", "unfccc",
                     "biodiversity", "जैव विविधता", "climate change", "जलवायु परिवर्तन", "pollution", "प्रदूषण", "wildlife",
                     "वन्यजीव", "national park", "राष्ट्रीय उद्यान", "species", "प्रजाति", "ecosystem", "पारिस्थितिकी तंत्र",
                     "carbon", "कार्बन", "wetland", "आर्द्रभूमि", "tiger reserve", "बाघ", "forest", "वन", "जंगल", "sanctuary", "अभयारण्य",
@@ -204,6 +265,8 @@ class TopicClassifier(
             Lexicon(
                 aliases = listOf("current affairs", "करेंट अफेयर्स", "समसामयिकी", "current events", "news", "समाचार", "ca"),
                 keywords = listOf(
+                    "current", "करंट", "affairs", "अफेयर्स", "daily news", "monthly", "मासिक", "magazine", "पत्रिका", "vision ias",
+                    "insights", "newspaper reading", "headlines",
                     "newspaper", "अखबार", "the hindu", "indian express", "editorial", "संपादकीय", "pib", "खबर", "news",
                     "monthly magazine", "yojana", "योजना", "kurukshetra", "कुरुक्षेत्र", "scheme", "dainik", "दैनिक",
                 ),

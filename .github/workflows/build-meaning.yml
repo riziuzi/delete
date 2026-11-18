@@ -1,0 +1,44 @@
+name: Build meaning model
+
+# Distils the on-device word-meaning table (tools/meaning/build.py) and commits it to the app's assets.
+on:
+  workflow_dispatch:
+  push:
+    branches: [pushup-alarm]
+    paths:
+      - tools/meaning/**
+      - .github/workflows/build-meaning.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-meaning
+  cancel-in-progress: true
+
+jobs:
+  meaning:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet sentence-transformers wordfreq numpy
+
+      - name: Build
+        run: python tools/meaning/build.py 2>&1 | tee meaning.log
+
+      - name: Commit the table
+        run: |
+          git config user.name "utho-ci"
+          git config user.email "utho-ci@users.noreply.github.com"
+          git add app/src/main/assets/meaning
+          git commit -m "Meaning table from $(git rev-parse --short HEAD)" || exit 0
+          for i in 1 2 3; do git pull --rebase origin pushup-alarm && git push origin HEAD:pushup-alarm && break; sleep 5; done
