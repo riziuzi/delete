@@ -92,19 +92,20 @@ object Notifications {
         post(ctx, id, n)
     }
 
-    /** A timed check-in got no answer: tap (or Speak / Type) to answer it later so that half hour counts. */
+    /** A timed check-in got no answer: tap (or Speak / Type) to answer it later so those minutes count. */
     fun showMissed(ctx: Context, timeMs: Long) {
         val lang = Prefs(ctx).lang
+        val min = Prefs(ctx).checkInMin
         val time = com.riziuzi.utho.core.JournalWriter.clock(timeMs, com.riziuzi.utho.data.Summaries.zone, lang)
         val speak = activityPending(ctx, ID_MISSED, CheckInActivity.answerIntent(ctx, timeMs).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val type = activityPending(ctx, ID_MISSED + 100, CheckInActivity.answerIntent(ctx, timeMs, type = true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val n = NotificationCompat.Builder(ctx, CH_CHECKIN)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(lang.t("Missed check-in · $time", "Check-in miss hua · $time"))
-            .setContentText(lang.t("Speak or type what you studied, so this half hour counts.", "Bolkar ya likhkar bataiye kya padha, tabhi yeh aadha ghanta count hoga."))
+            .setContentText(lang.t("Speak or type what you studied, so these $min minutes count.", "Bolkar ya likhkar bataiye kya padha, tabhi yeh $min minute count honge."))
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
-                    lang.t("Speak or type what you studied, so this half hour counts.", "Bolkar ya likhkar bataiye kya padha, tabhi yeh aadha ghanta count hoga."),
+                    lang.t("Speak or type what you studied, so these $min minutes count.", "Bolkar ya likhkar bataiye kya padha, tabhi yeh $min minute count honge."),
                 ),
             )
             .setContentIntent(speak)

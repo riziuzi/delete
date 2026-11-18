@@ -47,6 +47,14 @@ class VoiceRecognizer(
     private var triedSystem = false
     private var told = false
 
+    /**
+     * Keep one listening session open this long (until [stop]) instead of ending it at each pause. Every new
+     * session makes the phone's speech service play its mic beep, so fewer sessions means fewer beeps.
+     * Uses Android 13+'s segmented sessions (text comes back at each pause while the mic stays on) and Google's
+     * dictation mode; if the phone's recogniser ignores both, it still restarts after each phrase as before.
+     */
+    var sessionMs: Long = 0
+
     // If the on-device model can't do this language, remember it and go straight to the regular
     // recogniser next time instead of failing first (that round trip was the delay before listening).
     private val memo = context.getSharedPreferences(MEMO, Context.MODE_PRIVATE)
@@ -74,6 +82,21 @@ class VoiceRecognizer(
         runCatching { r.stopListening() }
         // If the recogniser has nothing pending it may never call back.
         main.postDelayed({ finish() }, 2500)
+    }
+
+    /**
+     * Stop now and keep what was already heard (the caller has the partial text). Skips the recogniser's
+     * "stop" step, which on many phones plays a second beep.
+     */
+    fun cancel() {
+        if (!active) {
+            finish()
+            return
+        }
+        active = false
+        main.removeCallbacksAndMessages(null)
+        runCatching { recognizer?.cancel() }
+        finish()
     }
 
     fun destroy() {
@@ -123,7 +146,7 @@ class VoiceRecognizer(
     private fun listen() {
         if (!active) return
         try {
-            recognizer?.startListening(intent(context, lang))
+            recognizer?.startListening(intent(context, lang, sessionMs))
         } catch (_: Exception) {
             main.postDelayed({ listen() }, 400)
         }
@@ -145,6 +168,15 @@ class VoiceRecognizer(
         override fun onPartialResults(partialResults: Bundle?) {
             val t = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
             if (t.isNotBlank()) listener.onPartial(t)
+        }
+
+        override fun onSegmentResults(segmentResults: Bundle) {
+            val t = segmentResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (t.isNotBlank()) listener.onSegment(t)
+        }
+
+        override fun onEndOfSegmentedSession() {
+            if (active) main.postDelayed({ listen() }, 120) else finish()
         }
 
         override fun onResults(results: Bundle?) {
@@ -199,7 +231,7 @@ class VoiceRecognizer(
 
         fun primaryTag(lang: VoiceLang) = if (lang == VoiceLang.ENGLISH) "en-IN" else "hi-IN"
 
-        fun intent(context: Context, lang: VoiceLang): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        fun intent(context: Context, lang: VoiceLang, sessionMs: Long = 0): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryTag(lang))
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
@@ -211,6 +243,15 @@ class VoiceRecognizer(
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
             if (Build.VERSION.SDK_INT >= 33) {
                 putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
+            }
+            if (sessionMs > 0) {
+                // One long session: the mic stays on through pauses (Google's recogniser honours dictation mode;
+                // Android 13+ recognisers that support segments return text at each pause).
+                putExtra("android.speech.extra.DICTATION_MODE", true)
+                if (Build.VERSION.SDK_INT >= 33) {
+                    putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, sessionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                }
             }
             if (Build.VERSION.SDK_INT >= 34 && lang == VoiceLang.MIX) {
                 putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_HIGH_PRECISION)

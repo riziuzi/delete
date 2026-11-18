@@ -322,14 +322,7 @@ fun SettingsScreen(nav: Nav) {
 
         SectionLabel(tr("Voice check-ins", "Voice check-ins"))
         CardBox {
-            Text(tr("While studying, ask me every", "Padhai ke dauraan har"), fontSize = 16.sp)
-            Segmented(
-                listOf(0 to tr("Off", "Off"), 15 to "15m", 30 to "30m", 45 to "45m", 60 to "60m"),
-                interval, {
-                    prefs.checkInMin = it
-                    AlarmScheduler.scheduleNextCheckIn(ctx)
-                }, Modifier.fillMaxWidth(),
-            )
+            CheckInTiming()
             Divider()
             Text(tr("I speak in", "Main bolta/bolti hoon"), fontSize = 16.sp)
             Segmented(
@@ -557,5 +550,42 @@ fun LearnedScreen(nav: Nav) {
                 if (notes > 0 || words.isNotEmpty()) SmallTextButton(tr("Forget this subject", "Yeh subject bhool jao")) { store.forgetTopic(subject) }
             }
         }
+    }
+}
+
+/** How often the check-in pop-up comes while studying, and how long it listens. Used in Settings and the study screen. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CheckInTiming() {
+    val ctx = LocalContext.current
+    val prefs = remember { Prefs(ctx) }
+    var every by remember { mutableIntStateOf(prefs.checkInMin) }
+    var listen by remember { mutableIntStateOf(prefs.listenSeconds) }
+    Text(tr("While studying, ask me every", "Padhai ke dauraan har kitni der mein poochhein"), fontSize = 16.sp)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(0, 10, 15, 20, 25, 30, 45, 60, 90).forEach { m ->
+            OptionTile(if (m == 0) tr("Off", "Off") else "$m min", m == every, {
+                every = m
+                prefs.checkInMin = m
+                AlarmScheduler.scheduleNextCheckIn(ctx)
+            }, minHeight = 40.dp, modifier = Modifier.testTag("every-$m"))
+        }
+    }
+    if (every > 0) {
+        Text(tr("The pop-up listens for", "Pop-up kitni der sunega"), fontSize = 16.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(10, 15, 20, 30, 45).forEach { s ->
+                OptionTile("$s sec", s == listen, {
+                    listen = s
+                    prefs.listenSeconds = s
+                }, minHeight = 40.dp, modifier = Modifier.testTag("listen-$s"))
+            }
+        }
+        Muted(
+            tr(
+                "Notes you start yourself (Speak) keep listening until you tap Done.",
+                "Jo note aap khud shuru karte hain (Bolein), woh Done dabane tak sunta rahega.",
+            ),
+        )
     }
 }

@@ -120,6 +120,11 @@ class Prefs(context: Context) {
         get() = p.getString("checkInSound", com.riziuzi.utho.voice.Earcons.DEFAULT) ?: com.riziuzi.utho.voice.Earcons.DEFAULT
         set(v) = edit { putString("checkInSound", v) }
 
+    /** How long the timed check-in pop-up listens, in seconds. */
+    var listenSeconds: Int
+        get() = p.getInt("listenSeconds", 15)
+        set(v) = edit { putInt("listenSeconds", v) }
+
     var checkInMin: Int
         get() = p.getInt("checkInMin", 30)
         set(v) = edit { putInt("checkInMin", v) }

@@ -59,7 +59,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 }
                 AlarmScheduler.scheduleNextCheckIn(ctx)
                 // Saved as missed right away; the pop-up (or a later answer) fills it in. Unanswered, this
-                // half hour isn't counted, even if the pop-up never got to show.
+                // stretch isn't counted, even if the pop-up never got to show.
                 Store.get(ctx).addCheckIn(session.id, CheckIn(now, "", null, CheckInKind.MISSED))
                 val n = Notifications.fullScreen(
                     ctx, Notifications.ID_CHECKIN, Notifications.CH_CHECKIN,

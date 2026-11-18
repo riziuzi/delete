@@ -76,11 +76,12 @@ import java.time.Instant
 
 /**
  * Voice (or typed) study notes. Three ways in:
- *  - TIMED: the every-30-minutes pop-up, also over the lock screen. Listens 15 s. If nothing is said the
- *    check-in stays "missed" (that half hour isn't counted) and a notification lets you answer later.
- *  - NOTE: Speak / Type from the home screen or journal. No time limit; stop with Done.
+ *  - TIMED: the pop-up every N minutes (Settings), also over the lock screen. Listens a few seconds (Settings).
+ *    If nothing is said the check-in stays "missed" (those minutes aren't counted) and a notification lets you
+ *    answer later.
+ *  - NOTE: Speak / Type from the home screen or journal. The mic stays on until Done.
  *  - ANSWER: a missed check-in opened later from its notification or the journal. Like NOTE, and the
- *    answer fills in that check-in so its half hour counts.
+ *    answer fills in that check-in so its minutes count.
  * The text is written in Hinglish; subject and mood are picked automatically and can be fixed with a tap.
  */
 class CheckInActivity : ComponentActivity() {
@@ -129,7 +130,7 @@ class CheckInActivity : ComponentActivity() {
         val prefs = Prefs(this)
         setContent {
             UthoTheme(prefs.theme, prefs.lang) {
-                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin) { finish() }
+                CheckInScreen(mode, session, target, typeFirst, prefs.checkInMin, prefs.listenSeconds) { finish() }
             }
         }
     }
@@ -140,7 +141,6 @@ class CheckInActivity : ComponentActivity() {
         const val EXTRA_MODE = "mode"
         const val EXTRA_TIME = "time"
         const val EXTRA_TYPE = "type"
-        const val LISTEN_SECONDS = 15
         private const val LATE_MS = 2 * 60_000L
 
         /** Speak (or type) a note now: home screen, journal, study screen. */
@@ -159,6 +159,9 @@ class CheckInActivity : ComponentActivity() {
 
 private enum class Stage { LISTENING, TYPING, RESULT, MISSED }
 
+/** A note you start yourself listens until you tap Done (with a 30-minute safety stop). */
+private const val NOTE_MAX_MS = 30 * 60_000L
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CheckInScreen(
@@ -167,6 +170,7 @@ private fun CheckInScreen(
     target: CheckIn?,
     typeFirst: Boolean,
     interval: Int,
+    listenSeconds: Int,
     onDone: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -180,7 +184,7 @@ private fun CheckInScreen(
     var stage by remember { mutableStateOf(if (typeFirst) Stage.TYPING else Stage.LISTENING) }
     var round by remember { mutableIntStateOf(0) }
     var ready by remember { mutableStateOf(false) }
-    var secondsLeft by remember { mutableIntStateOf(CheckInActivity.LISTEN_SECONDS) }
+    var secondsLeft by remember { mutableIntStateOf(listenSeconds) }
     var elapsedSec by remember { mutableIntStateOf(0) }
     val raw = remember { mutableStateListOf<String>() }
     var partial by remember { mutableStateOf("") }
@@ -309,7 +313,8 @@ private fun CheckInScreen(
 
     fun stopListening() {
         stopping = true
-        if (micOk && problem == null) recognizer.stop() else afterListening()
+        // Keep what's already on screen and cut the mic now (no extra "stop" beep, no wait).
+        if (micOk && problem == null) recognizer.cancel() else afterListening()
     }
 
     fun listenAgain() {
@@ -335,6 +340,8 @@ private fun CheckInScreen(
         if (stage != Stage.LISTENING) return@LaunchedEffect
         if (micOk) {
             muter.mute()
+            // One session for the whole note, so the phone's mic beep comes once, not after every pause.
+            recognizer.sessionMs = if (timed) (listenSeconds + 10) * 1000L else NOTE_MAX_MS
             recognizer.start()
         } else {
             problem = lang.t2("Microphone permission is off. Open Utho once and allow the microphone.", "Mic ki permission band hai. Utho kholkar mic allow karein.")
@@ -347,10 +354,10 @@ private fun CheckInScreen(
             val elapsed = System.currentTimeMillis() - from
             elapsedSec = (elapsed / 1000).toInt()
             if (timed) {
-                secondsLeft = (CheckInActivity.LISTEN_SECONDS - elapsedSec).coerceAtLeast(0)
+                secondsLeft = (listenSeconds - elapsedSec).coerceAtLeast(0)
                 val paused = raw.isNotEmpty() && partial.isBlank() && System.currentTimeMillis() - lastSpeech > 2500
                 if (secondsLeft == 0 || paused) break
-            } else if (elapsed > 3 * 60_000L) {
+            } else if (elapsed > NOTE_MAX_MS) {
                 break
             }
         }
@@ -412,7 +419,7 @@ private fun CheckInScreen(
                     timed -> "$secondsLeft"
                     else -> "%d:%02d".format(elapsedSec / 60, elapsedSec % 60)
                 }
-                Ring(if (timed) secondsLeft / CheckInActivity.LISTEN_SECONDS.toFloat() else 1f, level, label)
+                Ring(if (timed) secondsLeft / listenSeconds.toFloat() else 1f, level, label)
                 val live = (raw + listOf(partial)).filter { it.isNotBlank() }.joinToString(" ") { Hinglish.convert(it) }
                 Text(
                     live.ifBlank {
@@ -519,8 +526,8 @@ private fun CheckInScreen(
                 }
                 Muted(
                     tr(
-                        "This half hour won't count until you answer. Tap the notification to speak or type it later.",
-                        "Jab tak jawaab nahi denge, yeh aadha ghanta count nahi hoga. Baad mein notification par tap karke bolein ya likhein.",
+                        "These $interval minutes won't count until you answer. Tap the notification to speak or type it later.",
+                        "Jab tak jawaab nahi denge, yeh $interval minute count nahi honge. Baad mein notification par tap karke bolein ya likhein.",
                     ),
                     textAlign = TextAlign.Center,
                 )

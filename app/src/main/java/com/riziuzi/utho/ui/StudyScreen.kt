@@ -1,5 +1,7 @@
 package com.riziuzi.utho.ui
 
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,7 @@ fun StudyScreen(nav: Nav) {
     }
     var pickNew by remember { mutableStateOf(false) }
     var switchTopic by remember { mutableStateOf(false) }
+    var editTiming by remember { mutableStateOf(false) }
 
     ScreenScaffold(title = tr("Study session", "Padhai session"), onBack = { nav.back() }) {
         if (session == null) {
@@ -73,19 +76,24 @@ fun StudyScreen(nav: Nav) {
         val next = remember(tick) { prefs.nextCheckInMs }
         CardBox {
             if (interval > 0) {
-                Text(tr("Voice check-in every $interval min", "Har $interval minute par voice check-in"), fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Voice check-in every $interval min", "Har $interval minute par voice check-in"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    SmallTextButton(tr("Change", "Badlein")) { editTiming = true }
+                }
                 if (next > now) {
                     Muted(tr("Next at ", "Agla ") + JournalWriter.clock(next, Summaries.zone, lang))
                 }
                 Muted(
                     tr(
-                        "A pop-up listens for 15 seconds. No answer: that half hour isn't counted until you answer it.",
-                        "Pop-up 15 second sunega. Jawaab nahi diya to woh aadha ghanta tab tak count nahi hoga jab tak jawaab na dein.",
+                        "A pop-up listens for ${prefs.listenSeconds} seconds. No answer: those $interval minutes aren't counted until you answer.",
+                        "Pop-up ${prefs.listenSeconds} second sunega. Jawaab nahi diya to woh $interval minute tab tak count nahi honge jab tak jawaab na dein.",
                     ),
                 )
             } else {
-                Text(tr("Voice check-ins are off", "Voice check-ins off hain"), fontWeight = FontWeight.SemiBold)
-                Muted(tr("Turn them on in Settings.", "Settings mein on karein."))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Voice check-ins are off", "Voice check-ins off hain"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    SmallTextButton(tr("Turn on", "On karein")) { editTiming = true }
+                }
             }
             SecondButton(tr("Speak a note now", "Abhi note bolein"), {
                 ctx.startActivity(CheckInActivity.noteIntent(ctx))
@@ -117,6 +125,14 @@ fun StudyScreen(nav: Nav) {
             switchTopic = false
             store.addCheckIn(session.id, CheckIn(System.currentTimeMillis(), "", s, CheckInKind.SWITCH))
         }
+    }
+    if (editTiming) {
+        AlertDialog(
+            onDismissRequest = { editTiming = false },
+            title = { Text(tr("Voice check-ins", "Voice check-ins")) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { CheckInTiming() } },
+            confirmButton = { TextButton(onClick = { editTiming = false }) { Text(tr("Done", "Ho gaya")) } },
+        )
     }
 }
 
