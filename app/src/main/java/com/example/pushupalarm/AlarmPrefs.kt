@@ -17,6 +17,11 @@ class AlarmPrefs(context: Context) {
         get() = p.getBoolean("enabled", false)
         set(v) = p.edit().putBoolean("enabled", v).apply()
 
+    /** Rep beep volume, 0-100. 0 turns the beep off. */
+    var beepVolume: Int
+        get() = p.getInt("beepVolume", 80)
+        set(v) = p.edit().putInt("beepVolume", v).apply()
+
     var target: Int
         get() = p.getInt("target", 40)
         set(v) = p.edit().putInt("target", v).apply()

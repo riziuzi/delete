@@ -26,6 +26,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
@@ -71,6 +75,8 @@ private fun MainScreen() {
     var enabled by remember { mutableStateOf(prefs.enabled) }
     var target by remember { mutableIntStateOf(prefs.target) }
     var message by remember { mutableStateOf(if (prefs.enabled) "Alarm is on" else "") }
+    var beepVolume by remember { mutableIntStateOf(prefs.beepVolume) }
+    val scope = rememberCoroutineScope()
 
     fun enable() {
         prefs.hour = timeState.hour
@@ -110,6 +116,29 @@ private fun MainScreen() {
             Text("$target push-ups", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { target = (target + 5).coerceAtMost(200) }) { Text("+5") }
         }
+
+        Text(
+            "Rep beep volume: " + if (beepVolume == 0) "Off" else "$beepVolume%",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Slider(
+            value = beepVolume.toFloat(),
+            onValueChange = { beepVolume = it.toInt() },
+            onValueChangeFinished = {
+                prefs.beepVolume = beepVolume
+                scope.launch {
+                    val b = RepBeeper(beepVolume)
+                    b.beep()
+                    delay(400)
+                    b.release()
+                }
+            },
+            valueRange = 0f..100f,
+        )
+        Text(
+            "Beep plays at your phone's alarm volume. Practice screen: volume buttons adjust it too.",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Button(
             modifier = Modifier.fillMaxWidth(),
