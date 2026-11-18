@@ -85,6 +85,16 @@ class ScreenTour {
         }
     }
 
+    /** The keyboard would otherwise eat the next back gesture. */
+    private fun hideKeyboard() {
+        rule.runOnUiThread {
+            val w = rule.activity.window
+            androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+        }
+        Thread.sleep(400)
+        rule.waitForIdle()
+    }
+
     private fun startActivity(intent: Intent) {
         ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
@@ -94,6 +104,7 @@ class ScreenTour {
         // ---- setup
         shot("01-setup-step1")
         tag("nameField").performTextInput("Rishi")
+        hideKeyboard()
         click("UPSC CSE")
         shot("02-setup-step1-filled")
         click("Continue")
