@@ -14,7 +14,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
@@ -58,9 +57,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.google.mlkit.vision.pose.Pose
-import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import kotlinx.coroutines.delay
+import java.util.concurrent.Executors
 
 /**
  * Full-screen alarm UI: camera preview with skeleton, depth bar, live rep count. When the count
@@ -88,7 +86,7 @@ class AlarmRingActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                RingScreen(this, practice, prefs.target, prefs.beepVolume) {
+                RingScreen(this, practice, prefs.target, prefs.beepVolume, prefs.level) {
                     if (!practice) stopService(Intent(this, AlarmService::class.java))
                     finish()
                 }
@@ -102,7 +100,7 @@ class AlarmRingActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, beepVolume: Int, onDone: () -> Unit) {
+private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, beepVolume: Int, level: Level, onDone: () -> Unit) {
     val ctx = LocalContext.current
     var granted by remember {
         mutableStateOf(
@@ -113,7 +111,7 @@ private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, be
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     LaunchedEffect(Unit) { if (!granted) launcher.launch(Manifest.permission.CAMERA) }
 
-    val counter = remember { PushUpCounter() }
+    val counter = remember { PushUpCounter(level) }
     var result by remember { mutableStateOf<PushUpCounter.Result?>(null) }
     var skeleton by remember { mutableStateOf<Map<Int, Pt>>(emptyMap()) }
     val count = result?.count ?: 0
@@ -131,8 +129,8 @@ private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, be
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (granted) {
-            CameraWithPose(owner) { pose ->
-                skeleton = pose?.let { PoseUtils.landmarks(it) } ?: emptyMap()
+            CameraWithPose(owner) { pose, viewPoints ->
+                skeleton = viewPoints
                 result = counter.update(pose?.let { PoseUtils.leftArm(it) }, pose?.let { PoseUtils.rightArm(it) })
             }
             SkeletonOverlay(skeleton, Modifier.fillMaxSize())
@@ -140,6 +138,7 @@ private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, be
 
         DepthBar(
             angle = result?.elbowAngle,
+            level = level,
             phase = result?.phase ?: PushUpCounter.Phase.UNKNOWN,
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -165,44 +164,32 @@ private fun RingScreen(owner: LifecycleOwner, practice: Boolean, target: Int, be
     }
 }
 
-/**
- * Runs the on-device ML Kit pose model on the front camera. CameraX's MlKitAnalyzer returns
- * landmark coordinates already mapped onto the PreviewView (scaled and mirrored), so the
- * skeleton can be drawn directly on top.
- */
+/** Front camera preview + pose model. Follows the phone's rotation (portrait or landscape). */
 @Composable
-private fun CameraWithPose(owner: LifecycleOwner, onPose: (Pose?) -> Unit) {
+private fun CameraWithPose(owner: LifecycleOwner, onFrame: (Pose?, Map<Int, Pt>) -> Unit) {
     val ctx = LocalContext.current
-    val latestOnPose by rememberUpdatedState(onPose)
-    val detector = remember {
-        PoseDetection.getClient(
-            PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).build(),
-        )
-    }
+    val latestOnFrame by rememberUpdatedState(onFrame)
     val controller = remember { LifecycleCameraController(ctx) }
+    val previewView = remember { PreviewView(ctx) }
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val analyzer = remember { PoseFrameAnalyzer(previewView) { pose, pts -> latestOnFrame(pose, pts) } }
 
     DisposableEffect(Unit) {
-        val main = ContextCompat.getMainExecutor(ctx)
         controller.cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
         controller.setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
-        controller.setImageAnalysisAnalyzer(
-            main,
-            MlKitAnalyzer(listOf(detector), ImageAnalysis.COORDINATE_SYSTEM_VIEW_REFERENCED, main) { r ->
-                latestOnPose(r.getValue(detector))
-            },
-        )
+        controller.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+        controller.setImageAnalysisAnalyzer(executor, analyzer)
+        previewView.controller = controller
         controller.bindToLifecycle(owner)
         onDispose {
             controller.clearImageAnalysisAnalyzer()
             controller.unbind()
-            detector.close()
+            analyzer.close()
+            executor.shutdown()
         }
     }
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { c -> PreviewView(c).also { it.controller = controller } },
-    )
+    AndroidView(modifier = Modifier.fillMaxSize(), factory = { previewView })
 }
 
 @Composable
@@ -224,9 +211,9 @@ private fun SkeletonOverlay(points: Map<Int, Pt>, modifier: Modifier) {
  * full = deep enough for the rep to count. Turns green once the bottom is reached.
  */
 @Composable
-private fun DepthBar(angle: Float?, phase: PushUpCounter.Phase, modifier: Modifier) {
-    val up = PushUpCounter.UP_THRESHOLD
-    val down = PushUpCounter.DOWN_THRESHOLD
+private fun DepthBar(angle: Float?, level: Level, phase: PushUpCounter.Phase, modifier: Modifier) {
+    val up = level.up
+    val down = level.down
     val depth = if (angle == null) 0f else ((up - angle) / (up - down)).coerceIn(0f, 1f)
     val shown by animateFloatAsState(depth, label = "depth")
     val reached = phase == PushUpCounter.Phase.DOWN

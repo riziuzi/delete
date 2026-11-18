@@ -76,6 +76,7 @@ private fun MainScreen() {
     var target by remember { mutableIntStateOf(prefs.target) }
     var message by remember { mutableStateOf(if (prefs.enabled) "Alarm is on" else "") }
     var beepVolume by remember { mutableIntStateOf(prefs.beepVolume) }
+    var level by remember { mutableStateOf(prefs.level) }
     val scope = rememberCoroutineScope()
 
     fun enable() {
@@ -116,6 +117,26 @@ private fun MainScreen() {
             Text("$target push-ups", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { target = (target + 5).coerceAtMost(200) }) { Text("+5") }
         }
+
+        Text("How deep must you go?", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Level.entries.forEach { l ->
+                val pick = {
+                    level = l
+                    prefs.level = l
+                }
+                if (l == level) Button(onClick = pick) { Text(l.label) }
+                else OutlinedButton(onClick = pick) { Text(l.label) }
+            }
+        }
+        Text(
+            when (level) {
+                Level.EASY -> "Easy: a small bend counts. Most forgiving."
+                Level.NORMAL -> "Normal: elbows bent to about 105 degrees."
+                Level.STRICT -> "Strict: deep push-ups only (about 90 degrees)."
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Text(
             "Rep beep volume: " + if (beepVolume == 0) "Off" else "$beepVolume%",
@@ -172,8 +193,8 @@ private fun MainScreen() {
 
         if (message.isNotEmpty()) Text(message)
         Text(
-            "Tip: prop the phone on the floor in landscape, 1.5-2 m away, and do push-ups side-on " +
-                "so the camera sees your shoulder, elbow, wrist and hip.",
+            "Tip: put the phone on the floor 1.5-2 m away, upright or sideways. Side-on to the " +
+                "camera counts best; facing it works too. Keep your arms in view.",
             style = MaterialTheme.typography.bodySmall,
         )
     }

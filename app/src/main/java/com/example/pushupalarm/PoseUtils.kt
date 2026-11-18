@@ -46,8 +46,9 @@ object PoseUtils {
     fun rightArm(pose: Pose) = arm(pose, RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST, RIGHT_HIP)
 
     private fun arm(pose: Pose, shoulder: Int, elbow: Int, wrist: Int, hip: Int): Arm? {
-        val ls = listOf(shoulder, elbow, wrist, hip).map { pose.getPoseLandmark(it) ?: return null }
+        val ls = listOf(shoulder, elbow, wrist).map { pose.getPoseLandmark(it) ?: return null }
         val pts = ls.map { Pt(it.position.x, it.position.y) }
-        return Arm(pts[0], pts[1], pts[2], pts[3], ls.minOf { it.inFrameLikelihood })
+        val h = pose.getPoseLandmark(hip)?.takeIf { it.inFrameLikelihood >= 0.5f }
+        return Arm(pts[0], pts[1], pts[2], h?.let { Pt(it.position.x, it.position.y) }, ls.minOf { it.inFrameLikelihood })
     }
 }

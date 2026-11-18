@@ -22,6 +22,10 @@ class AlarmPrefs(context: Context) {
         get() = p.getInt("beepVolume", 80)
         set(v) = p.edit().putInt("beepVolume", v).apply()
 
+    var level: Level
+        get() = runCatching { Level.valueOf(p.getString("level", Level.EASY.name)!!) }.getOrDefault(Level.EASY)
+        set(v) = p.edit().putString("level", v.name).apply()
+
     var target: Int
         get() = p.getInt("target", 40)
         set(v) = p.edit().putInt("target", v).apply()

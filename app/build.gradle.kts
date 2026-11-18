@@ -47,7 +47,6 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
-    implementation("androidx.camera:camera-mlkit-vision:$camerax")
 
     // On-device pose model, bundled in the APK (works offline)
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
