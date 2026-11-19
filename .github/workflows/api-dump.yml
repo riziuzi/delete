@@ -1,0 +1,36 @@
+name: API dump
+
+# Prints exact library signatures to the api-dump branch (tools/apidump/dump.sh).
+on:
+  workflow_dispatch:
+  push:
+    branches: [pushup-alarm]
+    paths:
+      - tools/apidump/**
+      - .github/workflows/api-dump.yml
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Dump
+        run: bash tools/apidump/dump.sh /tmp/apidump
+      - name: Push to api-dump branch
+        run: |
+          cd /tmp/apidump
+          git init -q
+          git config user.name "utho-ci"
+          git config user.email "utho-ci@users.noreply.github.com"
+          git checkout -q -b api-dump
+          git add -A
+          git commit -qm "API dump"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" api-dump
