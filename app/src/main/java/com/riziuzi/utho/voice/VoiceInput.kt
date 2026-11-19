@@ -85,11 +85,21 @@ class VoiceInput(
         /** Drop it now, no more callbacks. */
         abstract fun abort()
 
-        fun ready() = main.post { if (!over && running === this) listening() }
-        fun partial(t: String) = main.post { if (!over && running === this && t.isNotBlank()) { heardAny = true; listener.onPartial(t) } }
-        fun segment(t: String) = main.post { if (!over && running === this && t.isNotBlank()) { heardAny = true; listener.onSegment(t) } }
-        fun failed(p: VoiceRecognizer.Problem, code: Int) = main.post { if (!over && running === this) engineFailed(this, p, code) }
-        fun ended() = main.post { if (!over && running === this) end() }
+        fun ready() {
+            main.post { if (!over && running === this) listening() }
+        }
+        fun partial(t: String) {
+            main.post { if (!over && running === this && t.isNotBlank()) { heardAny = true; listener.onPartial(t) } }
+        }
+        fun segment(t: String) {
+            main.post { if (!over && running === this && t.isNotBlank()) { heardAny = true; listener.onSegment(t) } }
+        }
+        fun failed(p: VoiceRecognizer.Problem, code: Int) {
+            main.post { if (!over && running === this) engineFailed(this, p, code) }
+        }
+        fun ended() {
+            main.post { if (!over && running === this) end() }
+        }
     }
 
     fun start() {
