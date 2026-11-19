@@ -147,12 +147,20 @@ fun problemText(p: VoiceRecognizer.Problem, lang: Lang): String = when (p) {
     )
     VoiceRecognizer.Problem.NO_PERMISSION -> lang.t2("Microphone permission is needed.", "Mic ki permission chahiye.")
     VoiceRecognizer.Problem.LANGUAGE_MISSING -> lang.t2(
-        "The Hindi voice pack isn't on this phone yet. Download it in Settings › Offline voice.",
-        "Hindi voice pack abhi phone mein nahi hai. Settings › Offline voice se download karein.",
+        "The Hindi voice pack isn't on this phone yet. Download it in Settings › Voice.",
+        "Hindi voice pack abhi phone mein nahi hai. Settings › Voice se download karein.",
     )
     VoiceRecognizer.Problem.NETWORK_NEEDED -> lang.t2(
-        "Offline voice isn't ready. Download the Hindi pack in Settings › Offline voice, or turn on internet once.",
-        "Offline voice ready nahi hai. Settings › Offline voice se Hindi pack download karein, ya ek baar internet on karein.",
+        "Offline voice isn't ready. Download the Hindi pack in Settings › Voice, or turn on internet once.",
+        "Offline voice ready nahi hai. Settings › Voice se Hindi pack download karein, ya ek baar internet on karein.",
     )
     VoiceRecognizer.Problem.OTHER -> lang.t2("Couldn't hear that. Try again.", "Sunai nahi diya. Phir se try karein.")
+    VoiceRecognizer.Problem.SILENT_MISSING -> lang.t2(
+        "Silent voice isn't ready on this phone yet. Type for now, and download it once in Settings › Voice.",
+        "Silent voice abhi phone mein ready nahi hai. Abhi type karein, aur Settings › Voice se ek baar download karein.",
+    )
+    VoiceRecognizer.Problem.NO_MIC -> lang.t2(
+        "The microphone is busy (another app may be using it). Type for now.",
+        "Mic abhi busy hai (shayad koi aur app use kar raha hai). Abhi type karein.",
+    )
 }

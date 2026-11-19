@@ -63,6 +63,14 @@ class Store private constructor(context: Context) {
         if (i >= 0 && sessionsList[i].active) sessionsList[i] = sessionsList[i].copy(endMs = now)
     }
 
+    /** A stopped session goes on again (an answer came for the check-in that stopped it). */
+    fun reopenSession(id: Long): StudySession? = change {
+        val i = sessionsList.indexOfFirst { it.id == id }
+        if (i < 0 || sessionsList.any { it.active }) return@change null
+        sessionsList[i] = sessionsList[i].copy(endMs = null)
+        sessionsList[i]
+    }
+
     fun addCheckIn(sessionId: Long, c: CheckIn) = change {
         val i = sessionsList.indexOfFirst { it.id == sessionId }
         if (i >= 0) sessionsList[i] = sessionsList[i].copy(checkIns = sessionsList[i].checkIns + c)

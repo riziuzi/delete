@@ -1,2 +1,3 @@
 -keep class com.riziuzi.utho.** { *; }
 -dontwarn com.google.mlkit.**
+-keep class com.google.mlkit.genai.** { *; }

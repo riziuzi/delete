@@ -11,7 +11,7 @@ import com.riziuzi.utho.core.t
 /**
  * The two soft sounds of a voice note: one when the mic actually starts listening, one when it stops.
  * Made by tools/sounds.py. Played as an alarm-type sound so they still play while media is muted
- * (see [BeepMuter]); kept at a gentle level.
+ * (see [AudioGuard]); kept at a gentle level. These are the only sounds of a voice note.
  */
 object Earcons {
     const val DEFAULT = "bowl"
@@ -41,6 +41,7 @@ object Earcons {
             then?.invoke()
             return
         }
+        VoiceLog.add(if (open) "earcon:open" else "earcon:close")
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -64,30 +65,4 @@ object Earcons {
 
     /** Settings preview: open, then close. */
     fun preview(ctx: Context, key: String) = play(ctx, key, true) { play(ctx, key, false) }
-}
-
-/**
- * Google's recogniser beeps every time it starts or stops listening (several times per note, because it
- * restarts after each pause). Those beeps go to the media stream, so media is muted while a note is
- * being recorded and restored right after. Streams the user had already muted are left alone.
- */
-class BeepMuter(context: Context) {
-    private val am = context.getSystemService(AudioManager::class.java)
-    private var muted = false
-
-    fun mute() {
-        if (muted) return
-        runCatching {
-            if (!am.isStreamMute(AudioManager.STREAM_MUSIC)) {
-                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-                muted = true
-            }
-        }
-    }
-
-    fun unmute() {
-        if (!muted) return
-        muted = false
-        runCatching { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0) }
-    }
 }

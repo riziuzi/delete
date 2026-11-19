@@ -61,7 +61,7 @@ import com.riziuzi.utho.alarm.AlarmScheduler
 import com.riziuzi.utho.alarm.AlarmService
 import com.riziuzi.utho.alarm.CheckIns
 import com.riziuzi.utho.alarm.Beeper
-import com.riziuzi.utho.voice.BeepMuter
+import com.riziuzi.utho.voice.AudioGuard
 import com.riziuzi.utho.voice.Earcons
 import android.os.Handler
 import android.os.Looper
@@ -75,7 +75,10 @@ import com.riziuzi.utho.core.StudySession
 import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
 import com.riziuzi.utho.data.Summaries
+import com.riziuzi.utho.voice.VoiceInput
 import com.riziuzi.utho.voice.VoiceRecognizer
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import java.time.Instant
 
@@ -135,7 +138,10 @@ class CheckInActivity : ComponentActivity() {
             AlarmScheduler.cancelDeadline(this)
         }
         if (mode == Mode.ANSWER && target == null) mode = Mode.NOTE
-        if (target != null) Notifications.cancel(this, Notifications.ID_MISSED)
+        // Answering the check-in that stopped study (from its notification): too late now means a plain note.
+        val waiting = if (mode == Mode.REVIVE) CheckIns.waiting(this) else null
+        if (mode == Mode.REVIVE && waiting == null) mode = Mode.NOTE
+        AudioGuard.recover(this)
         com.riziuzi.utho.data.MeaningModel.preload(this)
         shownMode = mode
         shownTime = timeExtra
@@ -143,12 +149,12 @@ class CheckInActivity : ComponentActivity() {
         val prefs = Prefs(this)
         setContent {
             UthoTheme(prefs.theme, prefs.lang) {
-                CheckInScreen(mode, session, target, typeFirst, prefs.checkInSec, prefs.listenSeconds) { finish() }
+                CheckInScreen(mode, session, target, waiting, typeFirst, prefs.checkInSec, prefs.listenSeconds) { finish() }
             }
         }
     }
 
-    enum class Mode { TIMED, TEST, NOTE, ANSWER }
+    enum class Mode { TIMED, TEST, NOTE, ANSWER, REVIVE }
 
     companion object {
         const val EXTRA_MODE = "mode"
@@ -169,6 +175,10 @@ class CheckInActivity : ComponentActivity() {
         /** Settings › test the pop-up: listens like a real check-in but saves nothing. */
         fun testIntent(ctx: Context): Intent = Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.TEST.name)
 
+        /** Answer the check-in that stopped study (its notification's Speak), which continues the session. */
+        fun reviveIntent(ctx: Context, type: Boolean = false): Intent =
+            Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.REVIVE.name).putExtra(EXTRA_TYPE, type)
+
         /** Answer the missed check-in saved at [timeMs]. */
         fun answerIntent(ctx: Context, timeMs: Long, type: Boolean = false): Intent =
             Intent(ctx, CheckInActivity::class.java).putExtra(EXTRA_MODE, Mode.ANSWER.name).putExtra(EXTRA_TIME, timeMs).putExtra(EXTRA_TYPE, type)
@@ -180,8 +190,6 @@ private enum class Stage { LISTENING, TYPING, RESULT, STOPPED }
 /** A note you start yourself listens until you tap Done (with a 30-minute safety stop). */
 private const val NOTE_MAX_MS = 30 * 60_000L
 
-/** How long media stays muted after the mic closes, so the speech service's closing beep can't be heard. */
-private const val UNMUTE_DELAY_MS = 5000L
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -189,6 +197,8 @@ private fun CheckInScreen(
     mode: CheckInActivity.Mode,
     session: StudySession?,
     target: CheckIn?,
+    /** REVIVE: the check-in that stopped study. */
+    waiting: CheckIns.Waiting?,
     typeFirst: Boolean,
     /** Seconds between timed check-ins. */
     interval: Int,
@@ -201,8 +211,12 @@ private fun CheckInScreen(
     val store = remember { Store.get(ctx) }
     val timed = mode == CheckInActivity.Mode.TIMED
     val test = mode == CheckInActivity.Mode.TEST
-    // Timed and test pop-ups listen by themselves for the set time and close by themselves.
-    val auto = timed || test
+    // Answering the check-in that stopped study (from the notification, or Speak / Type on "Study stopped").
+    var reviving by remember { mutableStateOf(mode == CheckInActivity.Mode.REVIVE) }
+    var reviveTarget by remember { mutableStateOf(waiting) }
+    // Timed and test pop-ups listen by themselves for the set time and close by themselves (not when answering later).
+    fun isAuto() = (timed || test) && !reviving
+    val auto = isAuto()
     val fakeHeard = remember {
         val debuggable = (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         (ctx as? android.app.Activity)?.intent?.getStringExtra(CheckInActivity.EXTRA_FAKE_HEARD)?.takeIf { debuggable }
@@ -210,7 +224,7 @@ private fun CheckInScreen(
     var resolved by remember { mutableStateOf(false) }
     var stoppedAt by remember { mutableLongStateOf(0L) }
     val subjects = remember { prefs.subjects.ifEmpty { listOfNotNull(session?.subject) } }
-    val startedAt = remember { target?.timeMs ?: System.currentTimeMillis() }
+    val startedAt = remember { target?.timeMs ?: waiting?.timeMs ?: System.currentTimeMillis() }
 
     var stage by remember { mutableStateOf(if (typeFirst) Stage.TYPING else Stage.LISTENING) }
     var round by remember { mutableIntStateOf(0) }
@@ -236,9 +250,9 @@ private fun CheckInScreen(
     var touched by remember { mutableStateOf(false) }
 
     val micOk = remember { ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
-    // One soft sound when the mic really opens, one when it closes; Google's own beeps are muted meanwhile.
+    // One soft sound when the mic really opens, one when it closes. Utho opens the mic itself, so the
+    // phone's speech service has no sound to play (and media stays muted around it anyway: VoiceInput).
     val sound = remember { prefs.checkInSound }
-    val muter = remember { BeepMuter(ctx) }
     var micOpen by remember { mutableStateOf(false) }
 
     fun closeMic() {
@@ -246,8 +260,6 @@ private fun CheckInScreen(
             micOpen = false
             Earcons.play(ctx, sound, open = false)
         }
-        // The speech service beeps when it releases the mic (done in cancel/destroy); keep media muted until that has passed.
-        Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, UNMUTE_DELAY_MS)
     }
 
     fun save() {
@@ -262,6 +274,8 @@ private fun CheckInScreen(
         val corrected = chosen != guessedTopic
         val c = CheckIn(startedAt, text, chosen, CheckInKind.SPOKEN, corrected = corrected, mood = mood)
         when {
+            // Study goes on from where it stopped, and this interval counts.
+            reviving -> CheckIns.revive(ctx, c)
             target != null -> {
                 store.updateCheckIn(target.timeMs) { c }
                 // An answer to the check-in waiting now (pop-up or journal) keeps study going.
@@ -275,7 +289,7 @@ private fun CheckInScreen(
         // The word list grows from notes you confirmed: a fix counts double, a plain Save once.
         // A timed pop-up that saved itself without a tap teaches nothing (it may have guessed wrong).
         if (chosen != null && text.isNotBlank()) {
-            if (corrected) store.learn(chosen, text, strong = true) else if (!auto || touched) store.learn(chosen, text, strong = false)
+            if (corrected) store.learn(chosen, text, strong = true) else if (!isAuto() || touched) store.learn(chosen, text, strong = false)
         }
         onDone()
     }
@@ -294,7 +308,7 @@ private fun CheckInScreen(
 
     /** Nothing was said: the study timer stops at your last answer and this interval leaves no entry. */
     fun noAnswer() {
-        if (stage == Stage.STOPPED) return
+        if (stage == Stage.STOPPED || reviving) return
         resolved = true
         stage = Stage.STOPPED
         if (timed && target != null) stoppedAt = CheckIns.noAnswer(ctx, target.timeMs) ?: 0L
@@ -305,7 +319,7 @@ private fun CheckInScreen(
         val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
         when {
             heard.isNotEmpty() -> analyse(heard.joinToString(" "), Hinglish.note(heard))
-            auto -> noAnswer()
+            isAuto() -> noAnswer()
             else -> {
                 typeHint = problem ?: lang.t2("Didn't catch anything. Type it, or tap Speak to try again.", "Kuch sunai nahi diya. Type karein, ya Bolein dabakar phir try karein.")
                 stage = Stage.TYPING
@@ -314,7 +328,7 @@ private fun CheckInScreen(
     }
 
     val recognizer = remember {
-        VoiceRecognizer(ctx, prefs.voiceLang, object : VoiceRecognizer.Listener {
+        VoiceInput(ctx, prefs.voiceLang, object : VoiceRecognizer.Listener {
             override fun onListening() {
                 setReady()
                 if (!micOpen) {
@@ -332,7 +346,11 @@ private fun CheckInScreen(
                 lastSpeech = System.currentTimeMillis()
             }
             override fun onLevel(level: Float) = setLevel(level)
-            override fun onProblem(problem: VoiceRecognizer.Problem, code: Int) = setProblem(problemText(problem, lang))
+            override fun onProblem(problem: VoiceRecognizer.Problem, code: Int) {
+                setProblem(problemText(problem, lang))
+                // No voice right now: typing is the way to answer (a timed pop-up still waits for it).
+                if (problem == VoiceRecognizer.Problem.SILENT_MISSING || problem == VoiceRecognizer.Problem.NO_MIC) toTyping()
+            }
             override fun onFinished() {
                 // After a problem the message stays up; the timer (timed) or Done (note) moves on.
                 if (stage == Stage.LISTENING && (problem == null || stopping)) afterListening()
@@ -340,6 +358,14 @@ private fun CheckInScreen(
 
             private fun setReady() {
                 ready = true
+            }
+            private fun toTyping() {
+                if (stage != Stage.LISTENING) return
+                closeMic()
+                val heard = (raw + listOf(partial)).filter { it.isNotBlank() }
+                typed = if (heard.isEmpty()) "" else Hinglish.note(heard)
+                typeHint = problem
+                stage = Stage.TYPING
             }
             private fun setLevel(v: Float) {
                 level = v
@@ -369,25 +395,40 @@ private fun CheckInScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            // A timed pop-up closed (back, swipe away) before it was answered counts as no answer.
             val changing = (ctx as? android.app.Activity)?.isChangingConfigurations == true
-            if (timed && !resolved && !changing && target != null) CheckIns.noAnswer(ctx, target.timeMs)
-            // Closing while the mic is on: let the service go while muted, then bring media back.
+            // A timed pop-up closed (back, swipe away) before it was answered counts as no answer.
+            if (timed && !resolved && !reviving && !changing && target != null) CheckIns.noAnswer(ctx, target.timeMs)
+            // Closed without answering the check-in that stopped study: its notification stays to answer later.
+            if (reviving && !resolved && !changing) CheckIns.showWaiting(ctx)
             recognizer.destroy()
-            Handler(Looper.getMainLooper()).postDelayed({ muter.unmute() }, UNMUTE_DELAY_MS)
+            if (micOpen) closeMic()
         }
+    }
+
+    // A note you started yourself stops listening when you leave the screen (Home, another app), keeping what was said.
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            val changing = (ctx as? android.app.Activity)?.isChangingConfigurations == true
+            if (e == Lifecycle.Event.ON_STOP && !changing && !isAuto() && stage == Stage.LISTENING) stopListening()
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
     }
 
     // One listening round: wait for the mic to open, then 15 s (timed) or until Done (note, max 3 min).
     LaunchedEffect(round, stage == Stage.LISTENING) {
         if (stage != Stage.LISTENING) return@LaunchedEffect
+        val autoNow = isAuto()
         if (micOk) {
-            muter.mute()
-            // One session for the whole note, so the phone's mic beep comes once, not after every pause.
-            recognizer.sessionMs = if (auto) (listenSeconds + 10) * 1000L else NOTE_MAX_MS
+            // One session for the whole note.
+            recognizer.sessionMs = if (autoNow) (listenSeconds + 10) * 1000L else NOTE_MAX_MS
             recognizer.start()
         } else {
             problem = lang.t2("Microphone permission is off. Open Utho once and allow the microphone.", "Mic ki permission band hai. Utho kholkar mic allow karein.")
+            typeHint = problem
+            stage = Stage.TYPING
+            return@LaunchedEffect
         }
         val readyBy = System.currentTimeMillis() + 5000
         while (!ready && problem == null && System.currentTimeMillis() < readyBy) delay(100)
@@ -400,7 +441,7 @@ private fun CheckInScreen(
             delay(200)
             val elapsed = System.currentTimeMillis() - from
             elapsedSec = (elapsed / 1000).toInt()
-            if (auto) {
+            if (autoNow) {
                 secondsLeft = (listenSeconds - elapsedSec).coerceAtLeast(0)
                 val paused = raw.isNotEmpty() && partial.isBlank() && System.currentTimeMillis() - lastSpeech > 2500
                 if (secondsLeft == 0 || paused) break
@@ -414,7 +455,7 @@ private fun CheckInScreen(
     // Timed result: save and close by itself (counts wall time). Notes wait for Save.
     LaunchedEffect(stage) {
         when (stage) {
-            Stage.RESULT -> if (auto) {
+            Stage.RESULT -> if (isAuto()) {
                 while (!saved) {
                     val left = closeAt - System.currentTimeMillis()
                     if (left <= 0) break
@@ -424,7 +465,7 @@ private fun CheckInScreen(
                 save()
             }
             Stage.STOPPED -> {
-                val until = System.currentTimeMillis() + 6000
+                val until = System.currentTimeMillis() + 15_000
                 while (System.currentTimeMillis() < until) delay(200)
                 onDone()
             }
@@ -433,6 +474,12 @@ private fun CheckInScreen(
     }
 
     val question = when {
+        reviving && reviveTarget != null && interval > 0 -> {
+            val t = reviveTarget!!.timeMs
+            val a = JournalWriter.clock(t - interval * 1000L, Summaries.zone, lang)
+            val b = JournalWriter.clock(t, Summaries.zone, lang)
+            tr("What did you study from $a to $b?", "$a se $b tak kya padha?")
+        }
         mode == CheckInActivity.Mode.ANSWER && target != null && interval > 0 -> {
             val a = JournalWriter.clock(target.timeMs - interval * 1000L, Summaries.zone, lang)
             val b = JournalWriter.clock(target.timeMs, Summaries.zone, lang)
@@ -457,6 +504,7 @@ private fun CheckInScreen(
         Text(
             when {
                 test -> tr("Test check-in", "Test check-in")
+                reviving -> tr("Answer to keep studying", "Jawaab dein, padhai chalti rahegi")
                 mode == CheckInActivity.Mode.ANSWER -> tr("Missed check-in", "Missed check-in")
                 timed -> tr("Quick check-in", "Quick check-in")
                 else -> tr("Study note", "Study note")
@@ -528,19 +576,19 @@ private fun CheckInScreen(
                 )
                 LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 ButtonsRow {
-                    SecondButton(tr("Speak", "Bolein"), { listenAgain() }, Modifier.weight(1f))
+                    SecondButton(tr("Speak", "Bolein"), { listenAgain() }, Modifier.weight(1f).testTag("typingSpeak"))
                     BigButton(tr("Next", "Aage"), {
                         if (typed.isNotBlank()) analyse(typed, Hinglish.note(listOf(typed)))
                     }, Modifier.weight(1f).testTag("checkInNext"), enabled = typed.isNotBlank())
                 }
-                if (timed) {
+                if (timed && !reviving) {
                     Muted(tr("Cancel and study stops here.", "Cancel karne par padhai yahin ruk jaayegi."), textAlign = TextAlign.Center)
                     SmallTextButton(tr("Cancel", "Cancel")) { noAnswer() }
                 } else {
                     SmallTextButton(tr("Cancel", "Cancel")) { onDone() }
                 }
                 // A timed pop-up left open with nothing typed doesn't keep the screen on forever.
-                if (timed) {
+                if (timed && !reviving) {
                     LaunchedEffect(typed) {
                         delay(90_000)
                         if (stage == Stage.TYPING) {
@@ -603,20 +651,31 @@ private fun CheckInScreen(
                     when {
                         test -> tr("In a real check-in the study timer would stop here.", "Asli check-in mein padhai ka timer yahin ruk jaata.")
                         stoppedAt > 0 -> tr(
-                            "Nothing was said, so the timer stopped at ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)}. This interval isn't counted.",
-                            "Kuch nahi bola, isliye timer ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)} par ruk gaya. Yeh interval count nahi hua.",
+                            "Nothing was said, so the timer stopped at ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)}. Answer now, or later from the notification, and study goes on.",
+                            "Kuch nahi bola, isliye timer ${JournalWriter.clock(stoppedAt, Summaries.zone, lang)} par ruka. Abhi ya baad mein notification se jawaab dein, padhai chalti rahegi.",
                         )
                         else -> tr("Nothing was said.", "Kuch nahi bola.")
                     },
                     textAlign = TextAlign.Center,
                 )
-                if (timed && session != null) {
-                    BigButton(tr("Keep studying", "Padhai jaari rakhein"), {
-                        beginStudy(ctx, session.checkIns.lastOrNull { it.topic != null }?.topic ?: session.subject)
-                        onDone()
-                    }, Modifier.testTag("keepStudying"))
-                    SmallTextButton(tr("Close", "Band karein")) { onDone() }
+                val w = remember(stage) { if (timed) CheckIns.waiting(ctx) else null }
+                if (w != null) {
+                    ButtonsRow {
+                        SecondButton(tr("Type", "Type"), {
+                            reviveTarget = w
+                            reviving = true
+                            typed = ""
+                            typeHint = null
+                            stage = Stage.TYPING
+                        }, Modifier.weight(1f).testTag("reviveType"))
+                        BigButton(tr("Speak", "Bolein"), {
+                            reviveTarget = w
+                            reviving = true
+                            listenAgain()
+                        }, Modifier.weight(1f).testTag("reviveSpeak"))
+                    }
                 }
+                if (timed) SmallTextButton(tr("Close", "Band karein")) { onDone() }
             }
         }
     } }

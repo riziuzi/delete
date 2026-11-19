@@ -146,6 +146,30 @@ class Prefs(context: Context) {
         get() = runCatching { VoiceLang.valueOf(p.getString("voiceLang", "MIX")!!) }.getOrDefault(VoiceLang.MIX)
         set(v) = edit { putString("voiceLang", v.name) }
 
+    /**
+     * Use the phone's regular (Google) voice when no silent engine is on the phone. It opens the mic itself
+     * and plays its own sounds, so it's off unless the user turns it on.
+     */
+    var googleVoice: Boolean
+        get() = p.getBoolean("googleVoice", false)
+        set(v) = edit { putBoolean("googleVoice", v) }
+
+    // ---- a check-in that got no answer, which can still be answered from its notification ----
+    /** The stopped session, or -1 when nothing is waiting. */
+    var reviveSession: Long
+        get() = p.getLong("reviveSession", -1L)
+        set(v) = edit { putLong("reviveSession", v) }
+
+    /** When the unanswered check-in was. */
+    var reviveTime: Long
+        get() = p.getLong("reviveTime", -1L)
+        set(v) = edit { putLong("reviveTime", v) }
+
+    /** Until when an answer still continues that study session. */
+    var reviveUntil: Long
+        get() = p.getLong("reviveUntil", -1L)
+        set(v) = edit { putLong("reviveUntil", v) }
+
     var studyReminderOn: Boolean
         get() = p.getBoolean("studyReminderOn", true)
         set(v) = edit { putBoolean("studyReminderOn", v) }

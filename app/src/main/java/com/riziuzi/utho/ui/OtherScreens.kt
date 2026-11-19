@@ -451,22 +451,113 @@ fun SettingsScreen(nav: Nav) {
     }
 }
 
+/**
+ * Voice without Google's sounds: Utho records with its own mic and an on-device model turns it into text,
+ * so the phone's speech service never opens the mic. Shows whether that model is on the phone (with a
+ * one-time download), the offline packs Android's own recogniser can use instead, and the opt-in for
+ * Google voice when neither is there.
+ */
 @Composable
 private fun OfflineVoice() {
     val ctx = LocalContext.current
+    val prefs = remember { Prefs(ctx) }
     val onDevice = remember { VoiceRecognizer.onDeviceAvailable(ctx) }
-    Text(tr("Offline voice", "Offline voice"), fontSize = 16.sp)
+    var google by remember { mutableStateOf(prefs.googleVoice) }
+    Text(tr("Voice without Google sounds", "Google ki awaaz ke bina voice"), fontSize = 16.sp)
+    Muted(
+        tr(
+            "Utho records with its own mic and the phone turns it into text offline, so Google's mic beep never plays.",
+            "Utho apne mic se record karta hai aur phone offline text banata hai, isliye Google ki mic beep kabhi nahi bajti.",
+        ),
+    )
+    if (Build.VERSION.SDK_INT >= 31) {
+        SilentModelRow("Hindi + Hinglish", VoiceLang.HINDI, "silent-hi")
+        SilentModelRow("English", VoiceLang.ENGLISH, "silent-en")
+    }
     if (Build.VERSION.SDK_INT >= 33 && onDevice) {
+        Muted(tr("Backup: Android's offline packs", "Backup: Android ke offline pack"))
         PackRow("Hindi", "hi-IN")
         PackRow("English (India)", "en-IN")
-        Muted(tr("With these on the phone, check-ins work without internet.", "Yeh phone mein hon to check-in bina internet ke chalte hain."))
-    } else {
+    }
+    if (Build.VERSION.SDK_INT < 31) {
         Muted(
             tr(
-                "Voice uses your phone's recogniser. For offline use, download Hindi in Google app › Settings › Voice › Offline speech recognition.",
-                "Voice aapke phone ka system use karta hai. Offline ke liye Google app › Settings › Voice › Offline speech recognition mein Hindi download karein.",
+                "This Android version has no silent voice. Turn on Google voice below, or type your check-ins.",
+                "Is Android version mein silent voice nahi hai. Neeche Google voice on karein, ya check-in type karein.",
             ),
         )
+    }
+    Box(Modifier.testTag("googleVoice")) {
+        ToggleRow(
+            tr("Use Google voice if silent voice isn't ready", "Silent voice ready na ho to Google voice use karein"),
+            tr("Google plays its mic sound then.", "Tab Google ki mic awaaz bajegi."),
+            google,
+        ) {
+            google = it
+            prefs.googleVoice = it
+        }
+    }
+}
+
+private enum class SilentUi { CHECKING, READY, DOWNLOADABLE, DOWNLOADING, FAILED, UNAVAILABLE }
+
+/** ML Kit's on-device speech model for one language: ✓ Ready, Download (with progress), or not on this phone. */
+@Composable
+private fun SilentModelRow(name: String, lang: VoiceLang, tag: String) {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    var ui by remember { mutableStateOf(SilentUi.CHECKING) }
+    var percent by remember { mutableStateOf<Int?>(null) }
+    var check by remember { mutableIntStateOf(0) }
+    LaunchedEffect(check) {
+        val st = com.riziuzi.utho.voice.SilentVoice.mlKitStatus(lang)
+        ui = when (st) {
+            com.google.mlkit.genai.common.FeatureStatus.AVAILABLE -> SilentUi.READY
+            com.google.mlkit.genai.common.FeatureStatus.DOWNLOADABLE -> if (ui == SilentUi.DOWNLOADING || ui == SilentUi.FAILED) ui else SilentUi.DOWNLOADABLE
+            com.google.mlkit.genai.common.FeatureStatus.DOWNLOADING -> SilentUi.DOWNLOADING
+            else -> SilentUi.UNAVAILABLE
+        }
+    }
+    LaunchedEffect(ui) {
+        if (ui == SilentUi.DOWNLOADING) {
+            kotlinx.coroutines.delay(4000)
+            check++
+        }
+    }
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+        Text(name, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        when (ui) {
+            SilentUi.CHECKING -> Muted("…")
+            SilentUi.READY -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val green = if (cs.background.luminance() < 0.5f) androidx.compose.ui.graphics.Color(0xFF81C784) else androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = green, modifier = Modifier.size(20.dp))
+                Text(tr("Ready", "Ready"), color = green, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+            SilentUi.DOWNLOADABLE, SilentUi.FAILED -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (ui == SilentUi.FAILED) Text(tr("Didn't finish", "Poora nahi hua"), color = cs.error, fontSize = 13.sp)
+                OutlinedButton(
+                    onClick = {
+                        ui = SilentUi.DOWNLOADING
+                        percent = null
+                        com.riziuzi.utho.voice.SilentVoice.download(lang, scope, { percent = it }) { ok ->
+                            ui = if (ok) SilentUi.READY else SilentUi.FAILED
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.heightIn(min = 36.dp).testTag("$tag-download"),
+                ) {
+                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(" " + tr(if (ui == SilentUi.FAILED) "Retry" else "Download", if (ui == SilentUi.FAILED) "Phir try" else "Download"), fontSize = 14.sp)
+                }
+            }
+            SilentUi.DOWNLOADING -> Column(Modifier.width(130.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val p = percent
+                if (p != null) LinearProgressIndicator(progress = { p / 100f }, modifier = Modifier.fillMaxWidth())
+                else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Muted(if (p != null) "$p%" else tr("Downloading…", "Download ho raha hai…"))
+            }
+            SilentUi.UNAVAILABLE -> Muted(tr("Not on this phone", "Is phone mein nahi"))
+        }
     }
 }
 

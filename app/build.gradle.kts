@@ -57,9 +57,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
     }
@@ -69,6 +66,12 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -90,6 +93,11 @@ dependencies {
 
     // On-device pose model, bundled in the APK (works offline)
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+
+    // On-device speech to text fed from Utho's own mic (no speech-service sounds). The model itself lives in
+    // the phone's speech services and is downloaded once from Settings.
+    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
 

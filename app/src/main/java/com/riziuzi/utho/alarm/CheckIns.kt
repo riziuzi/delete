@@ -12,7 +12,6 @@ import com.riziuzi.utho.data.Prefs
 import com.riziuzi.utho.data.Store
 import com.riziuzi.utho.data.Summaries
 import com.riziuzi.utho.ui.CheckInActivity
-import com.riziuzi.utho.ui.MainActivity
 
 /**
  * The timed check-in rule:
@@ -84,18 +83,74 @@ object CheckIns {
         store.endSession(session.id, endAt)
         AlarmScheduler.cancelCheckIn(ctx)
         Notifications.cancel(ctx, Notifications.ID_SESSION)
-        val lang = Prefs(ctx).lang
-        val at = JournalWriter.clock(timeMs, Summaries.zone, lang)
-        val stop = JournalWriter.clock(endAt, Summaries.zone, lang)
-        Notifications.simple(
-            ctx, Notifications.ID_STUDY,
-            lang.t("Study stopped", "Padhai ruk gayi"),
-            lang.t(
-                "Nothing was said at the $at check-in, so study stopped at $stop.",
-                "$at ke check-in par kuch nahi bola, isliye padhai $stop par ruk gayi.",
-            ),
-            Intent(ctx, MainActivity::class.java),
-        )
+        // It can still be answered (by voice or by typing) from the lock screen; that continues study.
+        val prefs = Prefs(ctx)
+        val now = System.currentTimeMillis()
+        val every = prefs.checkInSec.coerceAtLeast(60) * 1000L
+        prefs.reviveSession = session.id
+        prefs.reviveTime = timeMs
+        prefs.reviveUntil = maxOf(timeMs + every, now + REVIVE_MIN_MS)
+        Notifications.showRevive(ctx, session, timeMs, endAt, prefs.reviveUntil)
         return endAt
+    }
+
+    /** An answer that comes later still continues study for this long at least. */
+    const val REVIVE_MIN_MS = 10 * 60_000L
+
+    /** The check-in that stopped study and can still be answered, or null. */
+    data class Waiting(val sessionId: Long, val timeMs: Long, val untilMs: Long)
+
+    fun waiting(ctx: Context, now: Long = System.currentTimeMillis()): Waiting? {
+        val p = Prefs(ctx)
+        if (p.reviveSession < 0 || p.reviveTime < 0) return null
+        if (now > p.reviveUntil) {
+            clearWaiting(ctx)
+            return null
+        }
+        return Waiting(p.reviveSession, p.reviveTime, p.reviveUntil)
+    }
+
+    /** Shows the "Study paused" notification again (the pop-up for it was closed without an answer). */
+    fun showWaiting(ctx: Context) {
+        val w = waiting(ctx) ?: return
+        val s = Store.get(ctx).sessions.firstOrNull { it.id == w.sessionId } ?: return
+        if (s.active) return
+        Notifications.showRevive(ctx, s, w.timeMs, s.endMs ?: w.timeMs, w.untilMs)
+    }
+
+    fun clearWaiting(ctx: Context) {
+        val p = Prefs(ctx)
+        p.reviveSession = -1L
+        p.reviveTime = -1L
+        p.reviveUntil = -1L
+        Notifications.cancel(ctx, Notifications.ID_MISSED)
+    }
+
+    /**
+     * An answer for the check-in that stopped study: the session goes on from where it was, this interval
+     * counts, and the next check-in is planned. Returns false when it's too late or another session started;
+     * the answer is then kept as a note.
+     */
+    fun revive(ctx: Context, answer: CheckIn, now: Long = System.currentTimeMillis()): Boolean {
+        val store = Store.get(ctx)
+        val w = waiting(ctx, now)
+        if (w == null || store.activeSession() != null) {
+            clearWaiting(ctx)
+            store.addFreeNote(answer.copy(timeMs = now, kind = CheckInKind.SPOKEN))
+            return false
+        }
+        val s = store.reopenSession(w.sessionId)
+        if (s == null) {
+            clearWaiting(ctx)
+            store.addFreeNote(answer.copy(timeMs = now, kind = CheckInKind.SPOKEN))
+            return false
+        }
+        store.addCheckIn(s.id, answer.copy(timeMs = w.timeMs, kind = CheckInKind.SPOKEN))
+        clearWaiting(ctx)
+        Notifications.cancel(ctx, Notifications.ID_STUDY)
+        Notifications.showSession(ctx, s)
+        val every = Prefs(ctx).checkInEverySec
+        if (every > 0) AlarmScheduler.scheduleCheckIn(ctx, maxOf(w.timeMs + every * 1000L, now + 60_000L))
+        return true
     }
 }

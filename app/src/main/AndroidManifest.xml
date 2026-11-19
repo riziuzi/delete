@@ -82,6 +82,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".alarm.ReviveReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".alarm.BootReceiver"
             android:exported="true">
             <intent-filter>

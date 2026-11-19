@@ -91,6 +91,72 @@ object Notifications {
         post(ctx, id, n)
     }
 
+    /**
+     * Nothing was said at a check-in, so study stopped. Shown on the lock screen with two ways to answer it:
+     * Speak (opens the pop-up, which listens until Done) and Type (write the answer right in the notification).
+     * Either one continues the study session. Silent, and gone by itself once it's too late to continue.
+     */
+    fun showRevive(ctx: Context, s: StudySession, checkInMs: Long, stoppedAt: Long, untilMs: Long) {
+        val lang = Prefs(ctx).lang
+        val zone = com.riziuzi.utho.data.Summaries.zone
+        val at = com.riziuzi.utho.core.JournalWriter.clock(checkInMs, zone, lang)
+        val stop = com.riziuzi.utho.core.JournalWriter.clock(stoppedAt, zone, lang)
+        val speak = activityPending(ctx, ID_MISSED, com.riziuzi.utho.ui.CheckInActivity.reviveIntent(ctx).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val input = androidx.core.app.RemoteInput.Builder(ReviveReceiver.KEY_TEXT)
+            .setLabel(lang.t("What did you study? How's your mood?", "Kya padha? Mood kaisa hai?"))
+            .build()
+        val typePi = PendingIntent.getBroadcast(
+            ctx, ID_MISSED, Intent(ctx, ReviveReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        val type = NotificationCompat.Action.Builder(android.R.drawable.ic_menu_edit, lang.t("Type", "Type karein"), typePi)
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .build()
+        val n = NotificationCompat.Builder(ctx, CH_CHECKIN)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(lang.t("Study paused at $stop", "Padhai $stop par ruki"))
+            .setContentText(
+                lang.t(
+                    "Nothing was said at the $at check-in. Answer to keep studying.",
+                    "$at ke check-in par kuch nahi bola. Jawaab dein to padhai chalti rahegi.",
+                ),
+            )
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    lang.t(
+                        "Nothing was said at the $at check-in, so the timer stopped at $stop. Speak or type what you studied to keep going: this interval counts too.",
+                        "$at ke check-in par kuch nahi bola, isliye timer $stop par ruka. Bolkar ya likhkar bataiye kya padha, padhai chalti rahegi aur yeh samay bhi gina jaayega.",
+                    ),
+                ),
+            )
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(speak)
+            .addAction(android.R.drawable.ic_btn_speak_now, lang.t("Speak", "Bolein"), speak)
+            .addAction(type)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter((untilMs - System.currentTimeMillis()).coerceAtLeast(60_000L))
+            .build()
+        post(ctx, ID_MISSED, n)
+    }
+
+    /** After an answer typed in the notification: what was saved (the inline reply needs this to finish). */
+    fun showReviveDone(ctx: Context, title: String, text: String) {
+        val n = NotificationCompat.Builder(ctx, CH_CHECKIN)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(6000)
+            .build()
+        post(ctx, ID_MISSED, n)
+    }
+
     /** Ongoing "Studying · Polity 1:20:05" notification while a session runs. */
     fun showSession(ctx: Context, s: StudySession) {
         val lang = Prefs(ctx).lang

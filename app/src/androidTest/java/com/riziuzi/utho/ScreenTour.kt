@@ -100,8 +100,15 @@ class ScreenTour {
         ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    @org.junit.After
+    fun after() {
+        com.riziuzi.utho.voice.FakeVoice.script = null
+    }
+
     @Test
     fun tour() {
+        // The emulator can't hear: a pretend engine reads Utho's mic and hears nothing, like a quiet room.
+        com.riziuzi.utho.voice.FakeVoice.script = emptyList()
         // ---- setup
         shot("01-setup-step1")
         tag("nameField").performTextInput("Rishi")
@@ -298,7 +305,7 @@ class ScreenTour {
             org.junit.Assert.assertTrue("no entry for the unanswered interval", it.checkIns.none { c -> c.kind == CheckInKind.MISSED })
             org.junit.Assert.assertEquals(com.riziuzi.utho.core.Stats.lastConfirmedMs(sessionBefore), it.endMs)
         }
-        passTime(7_000) // the "study stopped" screen closes by itself
+        passTime(16_000) // the "study stopped" screen closes by itself
 
         // ---- still awake?
         startActivity(Intent(ctx, AwakeCheckActivity::class.java))

@@ -23,6 +23,7 @@ import com.riziuzi.utho.ui.CheckInActivity
 import com.riziuzi.utho.ui.MainActivity
 import com.riziuzi.utho.ui.beginStudy
 import com.riziuzi.utho.ui.endStudy
+import com.riziuzi.utho.voice.FakeVoice
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -57,6 +58,8 @@ class CheckInFlowTest {
     private val store get() = Store.get(ctx)
 
     @Before fun setUp() {
+        // The emulator can't hear: a pretend engine reads Utho's real mic pipe and "hears" a script (silence here).
+        FakeVoice.script = emptyList()
         endStudy(ctx)
         store.clearAll()
         Prefs(ctx).apply {
@@ -68,6 +71,7 @@ class CheckInFlowTest {
     }
 
     @After fun tearDown() {
+        FakeVoice.script = null
         endStudy(ctx)
         AlarmScheduler.cancelDeadline(ctx)
         store.clearAll()
@@ -122,7 +126,9 @@ class CheckInFlowTest {
         val ended = store.sessions.single { it.id == session.id }
         assertEquals("nothing counted after the last answer", session.startMs, ended.endMs)
         assertTrue("no entry for the unanswered interval", ended.checkIns.isEmpty())
-        passTime(7_000) // closes by itself
+        tag("reviveSpeak").assertExists()
+        tag("reviveType").assertExists()
+        passTime(16_000) // closes by itself
     }
 
     @Test fun somethingSaidKeepsStudyingAndPicksSubjectAndMood() {
@@ -130,11 +136,8 @@ class CheckInFlowTest {
         val session = store.activeSession()!!
         val t = System.currentTimeMillis()
         store.addCheckIn(session.id, CheckIn(t, "", null, CheckInKind.MISSED))
-        ctx.startActivity(
-            CheckInActivity.timedIntent(ctx, t)
-                .putExtra(CheckInActivity.EXTRA_FAKE_HEARD, "polity ke fundamental rights padhe mood accha hai")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
+        FakeVoice.script = listOf(900L to "polity ke fundamental rights padhe mood accha hai")
+        ctx.startActivity(CheckInActivity.timedIntent(ctx, t).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         waitForTag("checkInSubject")
         shot("flow-3-answer-result")
         tag("checkInSubject").assertTextEquals("Subject: Polity")
@@ -154,9 +157,8 @@ class CheckInFlowTest {
         val session = store.activeSession()!!
         val t = System.currentTimeMillis()
         store.addCheckIn(session.id, CheckIn(t, "", null, CheckInKind.MISSED))
-        ctx.startActivity(
-            CheckInActivity.timedIntent(ctx, t).putExtra(CheckInActivity.EXTRA_FAKE_HEARD, "haan padh raha hoon").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
+        FakeVoice.script = listOf(700L to "haan padh raha hoon")
+        ctx.startActivity(CheckInActivity.timedIntent(ctx, t).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         waitForTag("checkInSubject")
         tag("checkInSubject").assertTextEquals("Subject: not selected")
         passTime(5_000)
@@ -212,7 +214,8 @@ class CheckInFlowTest {
     }
 
     @Test fun testPopupSavesNothing() {
-        ctx.startActivity(CheckInActivity.testIntent(ctx).putExtra(CheckInActivity.EXTRA_FAKE_HEARD, "geography mein monsoon padha").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        FakeVoice.script = listOf(700L to "geography mein monsoon padha")
+        ctx.startActivity(CheckInActivity.testIntent(ctx).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         waitForTag("checkInSubject")
         shot("flow-4-test-popup")
         tag("checkInSubject").assertTextEquals("Subject: Geography")

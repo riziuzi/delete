@@ -23,10 +23,16 @@ class VoiceRecognizer(
     private val context: Context,
     private val lang: VoiceLang,
     private val listener: Listener,
+    /**
+     * Audio from Utho's own microphone ([MicCapture]), a fresh pipe per listening round. When set, only the
+     * on-device recogniser is used and it never opens the mic itself (Android 13+), so it has nothing to
+     * beep about. Null: the recogniser opens the mic (and the phone's speech service plays its sounds).
+     */
+    private val audio: (() -> android.os.ParcelFileDescriptor?)? = null,
 ) {
     enum class Engine { ON_DEVICE, SYSTEM, NONE }
 
-    enum class Problem { NO_RECOGNIZER, NO_PERMISSION, LANGUAGE_MISSING, NETWORK_NEEDED, OTHER }
+    enum class Problem { NO_RECOGNIZER, NO_PERMISSION, LANGUAGE_MISSING, NETWORK_NEEDED, OTHER, SILENT_MISSING, NO_MIC }
 
     interface Listener {
         fun onReady(engine: Engine) {}
@@ -46,6 +52,7 @@ class VoiceRecognizer(
     private var finished = false
     private var triedSystem = false
     private var told = false
+    private var pipe: android.os.ParcelFileDescriptor? = null
 
     /**
      * Keep one listening session open this long (until [stop]) instead of ending it at each pause. Every new
@@ -67,7 +74,7 @@ class VoiceRecognizer(
         active = true
         finished = false
         told = false
-        if (!create(onDevice = !triedSystem && !memo.getBoolean(memoKey, false))) return
+        if (!create(onDevice = audio != null || (!triedSystem && !memo.getBoolean(memoKey, false)))) return
         listen()
     }
 
@@ -107,9 +114,17 @@ class VoiceRecognizer(
         main.removeCallbacksAndMessages(null)
         runCatching { recognizer?.destroy() }
         recognizer = null
+        closePipe()
+    }
+
+    /** Our copy of the pipe's read end, once the recogniser has its own (or it's no longer needed). */
+    private fun closePipe() {
+        runCatching { pipe?.close() }
+        pipe = null
     }
 
     private fun finish() {
+        closePipe()
         if (finished) return
         finished = true
         listener.onFinished()
@@ -124,6 +139,8 @@ class VoiceRecognizer(
                     engine = Engine.ON_DEVICE
                     SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
                 }
+                // Our own audio only goes to the on-device recogniser (Android 13+); never fall back to its mic.
+                audio != null -> null
                 SpeechRecognizer.isRecognitionAvailable(context) -> {
                     engine = Engine.SYSTEM
                     SpeechRecognizer.createSpeechRecognizer(context)
@@ -148,8 +165,22 @@ class VoiceRecognizer(
 
     private fun listen() {
         if (!active) return
+        val i = intent(context, lang, sessionMs)
+        if (audio != null && Build.VERSION.SDK_INT >= 33) {
+            closePipe()
+            val p = audio.invoke()
+            if (p == null) {
+                fail(Problem.NO_MIC, -1)
+                return
+            }
+            pipe = p
+            i.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, p)
+            i.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
+            i.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, android.media.AudioFormat.ENCODING_PCM_16BIT)
+            i.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, MicCapture.RATE)
+        }
         try {
-            recognizer?.startListening(intent(context, lang, sessionMs))
+            recognizer?.startListening(i)
         } catch (_: Exception) {
             main.postDelayed({ listen() }, 400)
         }
@@ -157,6 +188,8 @@ class VoiceRecognizer(
 
     private val callbacks = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
+            // The recogniser holds its own copy of the pipe now.
+            closePipe()
             if (!told) {
                 told = true
                 listener.onListening()
@@ -214,6 +247,10 @@ class VoiceRecognizer(
 
     /** The on-device model can't handle this language yet: use the phone's regular recogniser instead. */
     private fun fallBack() {
+        if (audio != null) {
+            fail(Problem.LANGUAGE_MISSING, 13)
+            return
+        }
         triedSystem = true
         memo.edit().putBoolean(memoKey, true).apply()
         val wasActive = active
