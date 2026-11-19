@@ -1,0 +1,13 @@
+     0 ms  guard:mute
+     2 ms  guard:hold
+     2 ms  voice:start
+    54 ms  engine:FAKE
+   108 ms  mic:open
+   112 ms  earcon:open
+  5311 ms  mic:close
+  5319 ms  fake:read=165376
+  5339 ms  voice:end
+  5339 ms  guard:release
+  5339 ms  earcon:close
+ 13392 ms  guard:unmute
+other sounds: []

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.SubjectMeaningTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:49.718Z" hostname="ip-10-0-143-105" time="0.661">
+  <properties/>
+  <testcase name="everydayTalkGetsNoSubject" classname="com.riziuzi.utho.core.SubjectMeaningTest" time="0.226"/>
+  <testcase name="politicalPartiesIsPolity" classname="com.riziuzi.utho.core.SubjectMeaningTest" time="0.152"/>
+  <testcase name="phrasingWithNoListWords" classname="com.riziuzi.utho.core.SubjectMeaningTest" time="0.142"/>
+  <testcase name="newPhrasing" classname="com.riziuzi.utho.core.SubjectMeaningTest" time="0.067"/>
+  <testcase name="builtPhrases" classname="com.riziuzi.utho.core.SubjectMeaningTest" time="0.069"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

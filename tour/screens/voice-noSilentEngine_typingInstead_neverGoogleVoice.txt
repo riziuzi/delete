@@ -1,0 +1,7 @@
+     0 ms  guard:mute
+    89 ms  guard:hold
+    89 ms  voice:start
+   196 ms  voice:end
+   196 ms  guard:release
+  8246 ms  guard:unmute
+other sounds: []

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.JournalTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:48.895Z" hostname="ip-10-0-143-105" time="0.097">
+  <properties/>
+  <testcase name="goalReachedAndPlank" classname="com.riziuzi.utho.core.JournalTest" time="0.032"/>
+  <testcase name="english" classname="com.riziuzi.utho.core.JournalTest" time="0.024"/>
+  <testcase name="hinglish" classname="com.riziuzi.utho.core.JournalTest" time="0.009"/>
+  <testcase name="spansFromTheDials" classname="com.riziuzi.utho.core.JournalTest" time="0.0"/>
+  <testcase name="checkInsAnsweredAndMood" classname="com.riziuzi.utho.core.JournalTest" time="0.006"/>
+  <testcase name="emptyDay" classname="com.riziuzi.utho.core.JournalTest" time="0.002"/>
+  <testcase name="weekSummary" classname="com.riziuzi.utho.core.JournalTest" time="0.016"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

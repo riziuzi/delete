@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.HinglishTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:48.795Z" hostname="ip-10-0-143-105" time="0.097">
+  <properties/>
+  <testcase name="englishLoanwordsComeBackInEnglish" classname="com.riziuzi.utho.core.HinglishTest" time="0.073"/>
+  <testcase name="hindiWordsAreTransliterated" classname="com.riziuzi.utho.core.HinglishTest" time="0.004"/>
+  <testcase name="punctuationAndHyphens" classname="com.riziuzi.utho.core.HinglishTest" time="0.0"/>
+  <testcase name="nuktaVariantsMatch" classname="com.riziuzi.utho.core.HinglishTest" time="0.002"/>
+  <testcase name="mixedSentence" classname="com.riziuzi.utho.core.HinglishTest" time="0.0"/>
+  <testcase name="longOrShortVowelSpellingsBothFound" classname="com.riziuzi.utho.core.HinglishTest" time="0.0"/>
+  <testcase name="piecesBecomeOneSentence" classname="com.riziuzi.utho.core.HinglishTest" time="0.012"/>
+  <testcase name="latinTextIsUntouched" classname="com.riziuzi.utho.core.HinglishTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

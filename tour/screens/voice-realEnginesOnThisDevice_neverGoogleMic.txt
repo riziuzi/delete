@@ -1,0 +1,13 @@
+     0 ms  guard:mute
+    13 ms  guard:hold
+    13 ms  voice:start
+   143 ms  engine:PLATFORM_SOURCE
+   194 ms  mic:open
+   381 ms  earcon:open
+   546 ms  engine:failed:PLATFORM_SOURCE:LANGUAGE_MISSING
+   560 ms  mic:close
+   561 ms  earcon:close
+   657 ms  voice:end
+   657 ms  guard:release
+  8708 ms  guard:unmute
+other sounds: []

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.StatsTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:49.613Z" hostname="ip-10-0-143-105" time="0.01">
+  <properties/>
+  <testcase name="streakForgivesTwoRestDaysAMonth" classname="com.riziuzi.utho.core.StatsTest" time="0.001"/>
+  <testcase name="streakTodayNotYetActive" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="spokenCheckInsTagThePastStretch" classname="com.riziuzi.utho.core.StatsTest" time="0.001"/>
+  <testcase name="missedCheckInDropsThatStretch" classname="com.riziuzi.utho.core.StatsTest" time="0.007"/>
+  <testcase name="lastConfirmedIsTheLastAnswerOrTheStart" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="longestBlock" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="activeSessionCountsUntilNow" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="sessionAcrossMidnightIsSplit" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="switchChangesTheNextStretch" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="bestTime" classname="com.riziuzi.utho.core.StatsTest" time="0.0"/>
+  <testcase name="streakBreaksOnThirdMissedDay" classname="com.riziuzi.utho.core.StatsTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

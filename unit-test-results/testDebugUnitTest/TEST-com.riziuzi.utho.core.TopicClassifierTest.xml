@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.TopicClassifierTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:50.381Z" hostname="ip-10-0-143-105" time="0.103">
+  <properties/>
+  <testcase name="nothingMatches" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="learnsFromCorrections" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.005"/>
+  <testcase name="saysTopicName" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.003"/>
+  <testcase name="customTopicByName" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="englishPolity" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="hinglishMaths" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.006"/>
+  <testcase name="hindiEssay" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="scienceTechTopicMapsToScience" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.005"/>
+  <testcase name="hindiPolity" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="geography" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="hindiHistory" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.046"/>
+  <testcase name="economics" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.004"/>
+  <testcase name="hindiTopicNamesUseBuiltInWords" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.005"/>
+  <testcase name="confidentWhenClear" classname="com.riziuzi.utho.core.TopicClassifierTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

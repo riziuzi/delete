@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.riziuzi.utho.core.CountersTest" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-11-19T01:13:48.606Z" hostname="ip-10-0-143-105" time="0.184">
+  <properties/>
+  <testcase name="plankStraightCounts" classname="com.riziuzi.utho.core.CountersTest" time="0.067"/>
+  <testcase name="pushStrictIgnoresShallow" classname="com.riziuzi.utho.core.CountersTest" time="0.017"/>
+  <testcase name="squatLyingIgnored" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="plankStandingDoesNotCount" classname="com.riziuzi.utho.core.CountersTest" time="0.006"/>
+  <testcase name="pushNoHip" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="factoryMakesEachCounter" classname="com.riziuzi.utho.core.CountersTest" time="0.007"/>
+  <testcase name="pushEasyNoisy" classname="com.riziuzi.utho.core.CountersTest" time="0.014"/>
+  <testcase name="pushNormalFull" classname="com.riziuzi.utho.core.CountersTest" time="0.002"/>
+  <testcase name="jacksFast" classname="com.riziuzi.utho.core.CountersTest" time="0.0"/>
+  <testcase name="jacksFull" classname="com.riziuzi.utho.core.CountersTest" time="0.002"/>
+  <testcase name="plankSaggingDoesNotCount" classname="com.riziuzi.utho.core.CountersTest" time="0.01"/>
+  <testcase name="pushStandingCurlsIgnored" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="pushEasyShallow" classname="com.riziuzi.utho.core.CountersTest" time="0.002"/>
+  <testcase name="pushNothingVisible" classname="com.riziuzi.utho.core.CountersTest" time="0.0"/>
+  <testcase name="squatStrictIgnoresShallow" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="pushEasyFast" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="squatFull" classname="com.riziuzi.utho.core.CountersTest" time="0.009"/>
+  <testcase name="plankShortDropoutKeepsCounting" classname="com.riziuzi.utho.core.CountersTest" time="0.01"/>
+  <testcase name="jacksHalfArmsOnlyCountOnEasy" classname="com.riziuzi.utho.core.CountersTest" time="0.0"/>
+  <testcase name="squatEasyShallow" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <testcase name="pushIdle" classname="com.riziuzi.utho.core.CountersTest" time="0.005"/>
+  <testcase name="plankLongDropoutStops" classname="com.riziuzi.utho.core.CountersTest" time="0.0"/>
+  <testcase name="pushFrontView" classname="com.riziuzi.utho.core.CountersTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
