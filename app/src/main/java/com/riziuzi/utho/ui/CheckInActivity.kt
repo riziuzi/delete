@@ -141,6 +141,8 @@ class CheckInActivity : ComponentActivity() {
         // Answering the check-in that stopped study (from its notification): too late now means a plain note.
         val waiting = if (mode == Mode.REVIVE) CheckIns.waiting(this) else null
         if (mode == Mode.REVIVE && waiting == null) mode = Mode.NOTE
+        // Answering it here: its notification steps aside (and comes back if this closes without an answer).
+        if (mode == Mode.REVIVE) Notifications.cancel(this, Notifications.ID_MISSED)
         AudioGuard.recover(this)
         com.riziuzi.utho.data.MeaningModel.preload(this)
         shownMode = mode
@@ -664,6 +666,8 @@ private fun CheckInScreen(
                         SecondButton(tr("Type", "Type"), {
                             reviveTarget = w
                             reviving = true
+                            resolved = false
+                            Notifications.cancel(ctx, Notifications.ID_MISSED)
                             typed = ""
                             typeHint = null
                             stage = Stage.TYPING
@@ -671,6 +675,8 @@ private fun CheckInScreen(
                         BigButton(tr("Speak", "Bolein"), {
                             reviveTarget = w
                             reviving = true
+                            resolved = false
+                            Notifications.cancel(ctx, Notifications.ID_MISSED)
                             listenAgain()
                         }, Modifier.weight(1f).testTag("reviveSpeak"))
                     }

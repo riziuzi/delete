@@ -396,6 +396,17 @@ class VoiceCasesTest {
         checkSilence(micRounds = 2)
     }
 
+    @Test fun answeringHidesTheNotification_andCancellingBringsItBack() {
+        stopBySilence()
+        tag("reviveType").performClick()
+        passTime(500)
+        assertNull("out of the way while answering", waitingNotification())
+        rule.onNodeWithText("Cancel", useUnmergedTree = true).performClick()
+        waitUntil("notification back") { waitingNotification() != null }
+        assertNull(store.activeSession())
+        assertNotNull(CheckIns.waiting(ctx))
+    }
+
     @Test fun aLateAnswer_isKeptAsANote_andStudyStaysStopped() {
         stopBySilence()
         rule.onNodeWithText("Close", useUnmergedTree = true).performClick()

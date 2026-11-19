@@ -192,7 +192,7 @@ class ScreenTour {
         shot("17-profile")
         tag("openSettings").performClick()
         shot("18-settings-top")
-        rule.onNodeWithText("Offline voice").performScrollTo()
+        rule.onNodeWithText("I speak in").performScrollTo()
         shot("19-settings-voice")
         tag("openPopupSetup").performScrollTo().performClick()
         shot("19d-popup-setup")
@@ -215,6 +215,9 @@ class ScreenTour {
         rule.onNodeWithText("What Utho has learned").performScrollTo().performClick()
         shot("19c-learned")
         back()
+        // Voice without Google sounds: the silent model, backup packs, and the (off) Google voice switch.
+        tag("googleVoice").performScrollTo()
+        shot("19e-settings-silent-voice")
         tag("deleteAll").performScrollTo()
         shot("20-settings-bottom")
 
